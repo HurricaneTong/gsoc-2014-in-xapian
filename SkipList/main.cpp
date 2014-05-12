@@ -5,6 +5,7 @@
 #include "queue"
 #include "fstream"
 #include "SkipList.h"
+#include "string"
 
 using namespace std;
 
@@ -21,6 +22,22 @@ void inputMap( map<docid,doclength>& postlist )
 	for ( int i = 1 ; i<1024 ; ++i )
 	{
 		postlist[i] = 2*i;
+	}
+}
+
+void inputChanges( map<docid,doclength>& changes )
+{
+	changes[5] = 250;
+	changes[6] = 25;
+	changes[15] = 1025;
+}
+
+void mergeChanges( map<docid,doclength>& postlist, const map<docid,doclength>& changes )
+{
+	map<docid,doclength>::const_iterator it = changes.begin();
+	for ( ; it!=changes.end() ; ++it )
+	{
+		postlist[it->first] = it->second;
 	}
 }
 
@@ -72,13 +89,15 @@ void inputMap( map<docid,doclength>& postlist )
 	return 1;
 }*/
 
-void test( const map<docid,doclength>& postlist, const SkipList& sl )
+void test( const map<docid,doclength>& postlist, const string& chunk )
 {
+	SkipListReader slr(chunk);
 	map<docid,doclength>::const_iterator it = postlist.begin();
 	for ( ; it!=postlist.end() ; ++it )
 	{
 		int v1 = it->second;
-		int v2 = sl.getData( it->first );
+		doclength v2 = 0;
+		slr.getDoclen( it->first, &v2 );
 		if ( v1 != v2 )
 		{
 			cout << it->first << endl;
@@ -122,11 +141,23 @@ int main()
 	//vector<unsigned> src(s,s+18);
 	//int p1,p2;
 	//addLevel(src,0,18,p1,p2);
-	map<docid,doclength> postlist;
+	string chunk;
+	map<docid,doclength> postlist,changes;
 	inputMap(postlist);
+	inputChanges(changes);
+
 	SkipList sl(postlist);
-	sl.buildSkipList(5);
-	test(postlist,sl);
+	sl.buildSkipList( cal_level(postlist.size()) );
+	sl.encode(chunk);
+	test(postlist,chunk);
+
+	SkipListWriter slw(chunk);
+	slw.merge_doclen_change(changes);
+
+	mergeChanges(postlist,changes);
+	test(postlist,chunk);
+
+	
 	//ofstream out("out.txt");
 	//out<<src;
 	//out.close();

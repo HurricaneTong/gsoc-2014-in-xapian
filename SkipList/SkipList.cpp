@@ -1,7 +1,112 @@
 #include "SkipList.h"
 #include "queue"
+#include "math.h"
 
 using std::queue;
+
+template<class U>
+inline void
+	pack_uint(std::string & s, U value)
+{
+	// Check U is an unsigned type.
+	//STATIC_ASSERT_UNSIGNED_TYPE(U);
+
+	while (value >= 128) {
+		s += static_cast<char>(static_cast<unsigned char>(value) | 0x80);
+		value >>= 7;
+	}
+	s += static_cast<char>(value);
+}
+
+/** Decode an unsigned integer from a string.
+ *
+ *  @param p	    Pointer to pointer to the current position in the string.
+ *  @param end	    Pointer to the end of the string.
+ *  @param result   Where to store the result (or NULL to just skip it).
+ */
+template<class U>
+inline bool
+unpack_uint(const char ** p, const char * end, U * result)
+{
+    // Check U is an unsigned type.
+   // STATIC_ASSERT_UNSIGNED_TYPE(U);
+
+    const char * ptr = *p;
+   //Assert(ptr);
+    const char * start = ptr;
+
+    // Check the length of the encoded integer first.
+    do {
+	if (ptr == end) {
+	    // Out of data.
+	    *p = NULL;
+	    return false;
+	}
+    } while (static_cast<unsigned char>(*ptr++) >= 128);
+
+    *p = ptr;
+
+    if (!result) return true;
+
+    *result = U(*--ptr);
+    if (ptr == start) {
+	// Special case for small values.
+	return true;
+    }
+
+    size_t maxbits = size_t(ptr - start) * 7;
+    if (maxbits <= sizeof(U) * 8) {
+	// No possibility of overflow.
+	do {
+	    unsigned char chunk = static_cast<unsigned char>(*--ptr) & 0x7f;
+	    *result = (*result << 7) | U(chunk);
+	} while (ptr != start);
+	return true;
+    }
+
+    size_t minbits = maxbits - 6;
+    if (minbits > sizeof(U) * 8) {
+	// Overflow.
+	return false;
+    }
+
+    while (--ptr != start) {
+	unsigned char chunk = static_cast<unsigned char>(*--ptr) & 0x7f;
+	*result = (*result << 7) | U(chunk);
+    }
+
+    U tmp = *result;
+    *result <<= 7;
+    if (*result < tmp) {
+	// Overflow.
+	return false;
+    }
+    *result |= U(static_cast<unsigned char>(*ptr) & 0x7f);
+    return true;
+}
+
+
+inline bool
+read_increase( const char** p, const char* end, docid* incre_did, doclength* len )
+{
+	unsigned tmp;
+	if ( incre_did == NULL )
+	{
+		incre_did = &tmp;
+	}
+	if ( len == NULL )
+	{
+		len = &tmp;
+	}
+	unpack_uint( p, end, incre_did );
+	unpack_uint( p, end, len );
+	return true;
+}
+
+int cal_level( unsigned size )
+{
+	return (int)(log10(size)/0.6);
+}
 
 void SkipList::genDiffVector( const map<docid,doclength>& postlist )
 {
@@ -15,9 +120,16 @@ void SkipList::genDiffVector( const map<docid,doclength>& postlist )
 	}
 }
 
-int SkipList::encodeLength( int n )
+int SkipList::encodeLength( unsigned n )
 {
-	return 1;
+	int len = 0;
+	while ( n >= 128 )
+	{
+		len++;
+		n >>= 7;
+	}
+	len++;
+	return len;
 }
 
 void SkipList::addLevel ( int ps, int &pe, int& pinfo1_, int& pinfo2_, int curLevel )
@@ -43,11 +155,11 @@ void SkipList::addLevel ( int ps, int &pe, int& pinfo1_, int& pinfo2_, int curLe
 
 	src.insert(src.begin()+pinfo1,0);
 	src.insert(src.begin()+pinfo1,0);
-	src.insert(src.begin()+pinfo1,-1);
+	src.insert(src.begin()+pinfo1,SEPERATOR);
 
 	src.insert(src.begin()+pinfo2,0);
 	src.insert(src.begin()+pinfo2,0);
-	src.insert(src.begin()+pinfo2,-1);
+	src.insert(src.begin()+pinfo2,SEPERATOR);
 
 	pe += 6;
 	src[pinfo2+2]=value2;
@@ -78,7 +190,7 @@ void SkipList::addLevel ( int ps, int &pe, int& pinfo1_, int& pinfo2_, int curLe
 	for( int i = ps-3 ; i>=0 ; i-- )
 	{
 		offset += encodeLength(src[i]);
-		if ( src[i]==(unsigned)-1 && src[i+1]>=offset )
+		if ( src[i]==SEPERATOR && src[i+1]>=offset )
 		{
 			if ( updateCount >= curLevel )
 			{
@@ -99,6 +211,10 @@ void SkipList::addLevel ( int ps, int &pe, int& pinfo1_, int& pinfo2_, int curLe
 
 void SkipList::buildSkipList( int level )
 {
+	if ( level == 0 )
+	{
+		return;
+	}
 	int curLevel = 0;
 	queue<int> positions;
 	positions.push(0);
@@ -198,4 +314,134 @@ int SkipList::getData( docid did, int* position ) const
 SkipList::SkipList( const map<docid,doclength>& postlist )
 {
 	genDiffVector(postlist);
+}
+
+void SkipList::encode( string& chunk ) const
+{
+	pack_uint( chunk,bias );
+	for ( int i = 0 ; i<(int)src.size() ; ++i )
+	{
+		pack_uint( chunk,src[i] );
+	}
+
+}
+
+SkipListReader::SkipListReader( const string& chunk_ )
+	: chunk(chunk_)
+{
+	pos = chunk.data();
+	end = pos+chunk.size();
+}
+
+unsigned SkipListReader::readCurrent()
+{
+	const char* p_ = pos;
+	unsigned v = 0;
+	unpack_uint( &p_, end, &v );
+	return v;
+}
+
+bool SkipListReader::getDoclen( docid did, doclength* len )
+{
+	pos = chunk.data();
+	int curPosition = 0;
+	docid curDid;
+	unpack_uint( &pos, end, &curDid );
+	while ( true )
+	{
+		if ( curDid > did )
+		{
+			return false;
+		}
+		if ( curDid == did )
+		{
+			unsigned flag = 0;
+			unpack_uint( &pos, end, &flag );
+			while ( flag == SEPERATOR )
+			{
+				read_increase( &pos, end, NULL, NULL );
+				flag=0;
+				unpack_uint( &pos, end, &flag );
+			}
+			unpack_uint( &pos, end, len );
+			return true;
+		}
+		unsigned incre_did=0;
+		unpack_uint( &pos, end, &incre_did );
+		if ( incre_did == SEPERATOR )
+		{
+			unsigned p_offset = 0;
+			unsigned d_offset = 0;
+			read_increase( &pos, end, &p_offset, &d_offset );
+			if ( did >= curDid+d_offset )
+			{
+				pos += p_offset;
+				curDid += d_offset;
+			}
+			else
+			{
+				if ( readCurrent() != SEPERATOR )
+				{
+					unsigned d_offset = 0;
+					const char* p_ = pos;
+					read_increase( &p_, end, &d_offset, NULL );
+					curDid += d_offset;
+				}
+			}
+		}
+		else
+		{
+			unsigned cur_len = 0;
+			unpack_uint( &pos, end, &cur_len );
+			if ( pos == end )
+			{
+				return false;
+			}
+			if ( readCurrent() != SEPERATOR )
+			{
+				unsigned d_offset = 0;
+				const char* p_ = pos;
+				read_increase( &p_, end, &d_offset, NULL );
+				curDid += d_offset;
+			}
+		}
+	}
+}
+
+SkipListWriter::SkipListWriter( string& chunk_ )
+	: chunk( chunk_ )
+{
+	pos = chunk.data();
+	end = pos+chunk.size();
+}
+
+bool SkipListWriter::merge_doclen_change( const map<docid,doclength>& changes )
+{
+	map<docid,doclength> origin_postlist;
+	pos = chunk.data();
+	docid cur_did = 0, incre_did = 0;
+	doclength len = 0;
+	unpack_uint( &pos, end, &cur_did );
+	while ( pos != end )
+	{
+		unpack_uint( &pos, end, &incre_did );
+		while ( incre_did == SEPERATOR )
+		{
+			read_increase( &pos, end, NULL, NULL );
+			unpack_uint( &pos, end, &incre_did );
+		}
+		unpack_uint( &pos, end, &len );
+		cur_did += incre_did;
+		origin_postlist[cur_did]=len;
+	}
+	map<docid,doclength>::const_iterator it = changes.begin(), p;
+	for( ; it!=changes.end() ; ++it )
+	{
+		origin_postlist[it->first]=it->second;
+	}
+	SkipList sl( origin_postlist );
+	sl.buildSkipList( cal_level(origin_postlist.size()) );
+	chunk.clear();
+	sl.encode( chunk );
+	return true;
 }
