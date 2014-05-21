@@ -191,10 +191,49 @@ bool FixedWidthChunkWriter::merge_doclen_change( const map<docid,doclen>& change
 		}
 
 	}
-	for ( ; it!=changes.end() ; ++it )
+
+	map<docid,doclen>::const_iterator chg_it = changes.begin();
+	map<docid,doclen>::iterator ori_it = original_postlist.begin();
+
+	while ( chg_it != changes.end() )
 	{
-		original_postlist[it->first] = it->second;
+		while ( chg_it->first > ori_it->first )
+		{
+			++ori_it;
+			if ( ori_it == original_postlist.end() )
+			{
+				break;
+			}
+		}
+		if ( ori_it == original_postlist.end() )
+		{
+			original_postlist.insert( ori_it, *chg_it );
+			++chg_it;
+			while ( chg_it != changes.end() )
+			{
+				original_postlist.insert( ori_it, *chg_it );
+				++chg_it;
+			}
+			break;
+		}
+		if ( ori_it->first == chg_it->first )
+		{
+			if ( chg_it->second != SEPERATOR )
+			{
+				ori_it->second = chg_it->second;
+			}
+			else
+			{
+				ori_it = original_postlist.erase( ori_it );
+			}
+		}
+		else
+		{
+			original_postlist.insert( ori_it, *chg_it );
+		}
+		++chg_it;
 	}
+
 	chunk.clear();
 	FixedWidthChunk fwc( original_postlist );
 	fwc.encode( chunk );
