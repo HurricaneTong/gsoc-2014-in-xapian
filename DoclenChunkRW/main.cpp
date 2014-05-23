@@ -10,7 +10,8 @@ void inputMap( map<docid,doclen>& postlist )
 {
 	postlist[4]=5;
 	postlist[6]=254;
-	for ( int i=9 ; i<13 ; ++i )
+	postlist[8]=1024;
+	for ( int i=9 ; i<18 ; ++i )
 	{
 		postlist[i]=2*i;
 	}
@@ -44,17 +45,24 @@ void mergeChanges( map<docid,doclen>& postlist, const map<docid,doclen>& changes
 
 void test( const map<docid,doclen>& postlist, const string& chunk )
 {
+	vector< pair<docid,doclen> > datas;
 	DoclenChunkReader cr( chunk );
 	map<docid,doclen>::const_iterator it = postlist.begin();
 	for ( ; it!=postlist.end() ; ++it )
 	{
-		doclen l1 = it->second;
-		doclen l2 = cr.get_doclen( it->first );
+		datas.push_back(*it);
+	}
+	for ( int i=0 ; i<100 ; ++i )
+	{
+		int p = rand()%datas.size();
+		doclen l1 = datas[p].second;
+		doclen l2 = cr.get_doclen( datas[p].first );
 		if ( l1 != l2 )
 		{
-			cout << "wrong @did " << it->first << endl;
+			cout << "@did " << datas[p].first << endl;
 			cout << l1 << " : " << l2 << endl;
 		}
+		
 	}
 	cout << "OK!" << endl;
 	return;

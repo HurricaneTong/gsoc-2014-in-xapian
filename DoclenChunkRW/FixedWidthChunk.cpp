@@ -26,13 +26,14 @@ bool FixedWidthChunk::buildVector( const map<docid,doclen>& postlist )
 	map<docid,doclen>::const_iterator it = postlist.begin(), start_pos;
 	bias = it->first;
 	docid docid_before_start_pos = it->first;
-	unsigned min_contiguous_length = 3;
 
 	while ( it!=postlist.end() )
 	{
 		unsigned length_contiguous = 1;
 		docid last_docid = it->first, cur_docid = 0;
 		unsigned max_bytes = get_max_bytes(it->second);
+		unsigned used_bytes = 0;
+		unsigned good_bytes = 0;
 
 		start_pos = it;
 		it++;
@@ -40,16 +41,26 @@ bool FixedWidthChunk::buildVector( const map<docid,doclen>& postlist )
 		while ( it!=postlist.end() )
 		{
 			cur_docid = it->first;
-			if ( cur_docid != last_docid+1 || get_max_bytes(it->second)>max_bytes )
+			unsigned cur_bytes = get_max_bytes(it->second);
+			if ( cur_docid != last_docid+1 || cur_bytes>max_bytes )
 			{
 				break;
 			}
+			used_bytes += max_bytes;
+			good_bytes += cur_bytes;
+			if ( (float)good_bytes/used_bytes < DOCLEN_CHUNK_MIN_GOOD_BYTES_RATIO )
+			{
+				used_bytes = 0;
+				good_bytes = 0;
+				break;
+			}
+
 			length_contiguous++;
 			last_docid = cur_docid;
 			it++;
 		}
 
-		if ( length_contiguous > min_contiguous_length )
+		if ( length_contiguous > DOCLEN_CHUNK_MIN_CONTIGUOUS_LENGTH )
 		{
 			src.push_back(SEPERATOR);
 			src.push_back(start_pos->first-docid_before_start_pos);	
@@ -111,16 +122,26 @@ bool FixedWidthChunk::encode( string& chunk ) const
 
 doclen FixedWidthChunkReader::getDoclen( docid desired_did )
 {
-	const char* pos = chunk.data();
-	const char* end = pos+chunk.size();
-	docid bias = 0, cur_did = 0, incre_did = 0;
-	doclen doc_length = 0;
-	unsigned format_info = 0;
-	unpack_uint( &pos, end, &format_info );
-	unpack_uint( &pos, end, &bias );
-	cur_did = bias;
+	if ( cur_did==desired_did && doc_length!=-1 )
+	{
+		return doc_length;
+	}
+	if ( cur_did > desired_did )
+	{
+		pos = chunk.data();
+		end = pos+chunk.size();
+		unsigned format_info = 0;
+		unpack_uint( &pos, end, &format_info );
+		cur_did = 0;
+		unpack_uint( &pos, end, &cur_did );
+	}
+
+
+	docid incre_did = 0;
+
 	while ( pos!=end )
 	{
+		const char* old_pos = pos;
 		unpack_uint( &pos, end, &incre_did );
 		if ( incre_did != SEPERATOR )
 		{
@@ -143,6 +164,7 @@ doclen FixedWidthChunkReader::getDoclen( docid desired_did )
 			{
 				pos += bytes*(desired_did-cur_did);
 				unpack_uint_in_bytes( &pos, bytes, &doc_length );
+				pos = old_pos;
 				return doc_length;
 			}
 			pos += bytes*len;
@@ -234,6 +256,10 @@ bool FixedWidthChunkWriter::merge_doclen_change( const map<docid,doclen>& change
 		++chg_it;
 	}
 
+	/*for ( ; it!=changes.end() ; ++it )
+	{
+		original_postlist[it->first] = it->second;
+	}*/
 	chunk.clear();
 	FixedWidthChunk fwc( original_postlist );
 	fwc.encode( chunk );

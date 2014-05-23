@@ -4,55 +4,55 @@ bool DoclenChunkWriter::merge_doclen_changes( const map<docid,doclen>& changes )
 {
 	if ( chunk.empty() )
 	{
-		if ( changes.size() < DOCLEN_CHUNK_MIN_SKIPLIST_LENGTH )
-		{
-			FixedWidthChunk fwc( changes );
-			fwc.encode(chunk);
-		}
-		else
-		{
-			int contiguous_length = 0;
-			int contiguous_blocks = 0;
-			int length_of_blocks = 0;
-			map<docid,doclen>::const_iterator it = changes.begin();
-			docid cur_did, pre_did;
-			cur_did = it->first;
-			pre_did = cur_did;
-			while ( it!=changes.end() )
-			{
-				cur_did = it->first;
-				if ( cur_did==pre_did+1 )
-				{
-					contiguous_length++;
-				}
-				else
-				{
-					if ( contiguous_length > DOCLEN_CHUNK_MIN_CONTIGUOUS_LENGTH )
-					{
-						contiguous_blocks++;
-					}
-					length_of_blocks += contiguous_length;
-					contiguous_length = 0;
-				}
-				++it;
-				pre_did = cur_did;
-			}
-			if ( contiguous_length > DOCLEN_CHUNK_MIN_CONTIGUOUS_LENGTH )
-			{
-				contiguous_blocks++;
-				length_of_blocks += contiguous_length;
-			}
-			if ( length_of_blocks/(float)changes.size() > DOCLEN_CHUNK_MIN_CONTIGUOUS_PRECENTAGE )
-			{
+		//if ( changes.size() < DOCLEN_CHUNK_MIN_SKIPLIST_LENGTH )
+		//{
+		//	FixedWidthChunk fwc( changes );
+		//	fwc.encode(chunk);
+		//}
+		//else
+		//{
+		//	int contiguous_length = 0;
+		//	int contiguous_blocks = 0;
+		//	int length_of_blocks = 0;
+		//	map<docid,doclen>::const_iterator it = changes.begin();
+		//	docid cur_did, pre_did;
+		//	cur_did = it->first;
+		//	pre_did = cur_did;
+		//	while ( it!=changes.end() )
+		//	{
+		//		cur_did = it->first;
+		//		if ( cur_did==pre_did+1 )
+		//		{
+		//			contiguous_length++;
+		//		}
+		//		else
+		//		{
+		//			if ( contiguous_length > DOCLEN_CHUNK_MIN_CONTIGUOUS_LENGTH )
+		//			{
+		//				contiguous_blocks++;
+		//			}
+		//			length_of_blocks += contiguous_length;
+		//			contiguous_length = 0;
+		//		}
+		//		++it;
+		//		pre_did = cur_did;
+		//	}
+		//	if ( contiguous_length > DOCLEN_CHUNK_MIN_CONTIGUOUS_LENGTH )
+		//	{
+		//		contiguous_blocks++;
+		//		length_of_blocks += contiguous_length;
+		//	}
+		//	if ( length_of_blocks/(float)changes.size() > DOCLEN_CHUNK_MIN_CONTIGUOUS_PRECENTAGE )
+		//	{
 				FixedWidthChunk fwc( changes );
 				fwc.encode(chunk);				
-			}
-			else
-			{
-				SkipList sl( changes );
-				sl.encode(chunk);
-			}
-		}
+		//	}
+		//	else
+		//	{
+		//		SkipList sl( changes );
+		//		sl.encode(chunk);
+		//	}
+		//}
 	}
 	else
 	{
