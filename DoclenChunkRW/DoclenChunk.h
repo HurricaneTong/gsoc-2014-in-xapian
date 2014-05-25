@@ -3,6 +3,7 @@
 #include "string"
 #include "map"
 #include "vector"
+#include "iostream"
 
 using std::string;
 using std::map;
@@ -11,14 +12,10 @@ using std::vector;
 class DoclenChunkReader;
 class DoclenChunkWriter;
 
-typedef pair<string,string> b_tree_node;
-typedef vector<b_tree_node> b_tree;
-
 class DoclenChunkWriter
 {
 private:
 	string& chunk;
-	b_tree bt;
 public:
 	DoclenChunkWriter( string& chunk_ )
 		: chunk(chunk_)
