@@ -23,19 +23,18 @@ public:
 class FixedWidthChunkReader
 {
 private:
-	string chunk;
+	const string& chunk;
 	const char* pos;
 	const char* end;
 	docid cur_did;
 	doclen doc_length;
+
 public:
 	FixedWidthChunkReader( const string& chunk_ )
 		: chunk(chunk_)
 	{
 		pos = chunk.data();
 		end = pos+chunk.size();
-		unsigned format_info = 0;
-		unpack_uint( &pos, end, &format_info );
 		cur_did = 0;
 		doc_length = -1;
 		unpack_uint( &pos, end, &cur_did );

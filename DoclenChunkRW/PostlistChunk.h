@@ -40,10 +40,15 @@ class PostlistChunkReader {
      *  @param first_did  First document id in this chunk.
      *  @param data       The tag string with the header removed.
      */
-    PostlistChunkReader(docid first_did, const string & data_)
-	: data(data_), pos(data.data()), end(pos + data.length()), at_end(data.empty()), did(first_did)
+    PostlistChunkReader(const string & data_)
+	: data(data_), pos(data.data()), end(pos + data.length()), at_end(data.empty())
     {
-	if (!at_end) read_wdf(&pos, end, &wdf);
+		if(!at_end)
+		{
+			unpack_uint( &pos, end, &did );
+			next();
+		}
+		
     }
 
     docid get_docid() const {
@@ -77,7 +82,7 @@ class PostlistChunkWriter {
 	PostlistChunkWriter( string& chunk_)
 		: chunk(chunk_)
 	{
-
+		started = false;
 	};
 
 	/// Append an entry to this chunk.
@@ -110,6 +115,7 @@ class PostlistChunkWriter {
 	docid first_did;
 	docid current_did;
 
+public:
 	string& chunk;
 };
 
@@ -120,6 +126,9 @@ void PostlistChunkWriter::append(docid did,
 	if (!started) {
 		started = true;
 		first_did = did;
+		pack_uint( chunk, first_did-1 );
+		pack_uint( chunk, 0 );
+		started = true;
 	} else {
 		// Start a new chunk if this one has grown to the threshold.
 		//if (chunk.size() >= CHUNKSIZE) {
@@ -140,26 +149,17 @@ void PostlistChunkWriter::append(docid did,
 }
 
 
-void merge_doclen_changes(const map<docid, doclen> & doclens, string& chunk )
+string merge_doclen_changes(const map<docid, doclen> & doclens, const string& chunk )
 {
 
-	if (doclens.empty()) return;
-
-	// Ensure there's a first chunk.
-	//string current_key = make_key(string());
-	//if (!key_exists(current_key)) {
-	//	LOGLINE(DB, "Adding dummy first chunk");
-	//	string newtag = make_start_of_first_chunk(0, 0, 0);
-	//	newtag += make_start_of_chunk(true, 0, 0);
-	//	add(current_key, newtag);
-	//}
-
+	if (doclens.empty()) return string();
 	map<docid, termcount>::const_iterator j;
 	j = doclens.begin();
 
-	docid max_did;
-	PostlistChunkReader *from = new PostlistChunkReader(-1,chunk);
-	PostlistChunkWriter *to = new PostlistChunkWriter(chunk);
+	PostlistChunkReader *from = new PostlistChunkReader(chunk);
+
+	string new_chunk;
+	PostlistChunkWriter *to = new PostlistChunkWriter(new_chunk);
 	for ( ; j != doclens.end(); ++j) {
 		docid did = j->first;
 
@@ -187,28 +187,60 @@ void merge_doclen_changes(const map<docid, doclen> & doclens, string& chunk )
 		delete from;
 	}
 	delete to;
+	return new_chunk;
 }
 
-bool :move_forward_in_chunk_to_at_least(docid desired_did)
+class PostlistChunk
 {
-	if (did >= desired_did)
-		RETURN(true);
-
-	if (desired_did <= last_did_in_chunk) {
-		while (pos != end) {
-			read_did_increase(&pos, end, &did);
-			if (did >= desired_did) {
-				read_wdf(&pos, end, &wdf);
-				RETURN(true);
-			}
-			// It's faster to just skip over the wdf than to decode it.
-			read_wdf(&pos, end, NULL);
+public:
+	docid did;
+	termcount wdf;
+	const char *pos, *end;
+	string chunk;
+	PostlistChunk( const string& chunk_) : chunk(chunk_)
+	{
+		did = 0;
+		wdf = -1;
+		pos = chunk.data();
+		end = pos+chunk.size();
+		read_wdf( &pos, end, &did );
+	}
+	termcount get_doc_length( docid desired_did )
+	{
+		if ( move_forward_in_chunk_to_at_least(desired_did ))
+		{
+			return wdf;
+		}
+		return -1;
+		
+	}
+	bool move_forward_in_chunk_to_at_least(docid desired_did  )
+	{
+		if (did >= desired_did)
+		{
+			pos = chunk.data();
+			end = pos+chunk.size();
+			read_wdf( &pos, end, &did );
 		}
 
-		// If we hit the end of the chunk then last_did_in_chunk must be wrong.
-		Assert(false);
-	}
+		//if (desired_did <= last_did_in_chunk) {
+			while (pos != end) {
+				read_did_increase(&pos, end, &did);
+				if (did >= desired_did) {
+					read_wdf(&pos, end, &wdf);
+					return true;
+				}
+				// It's faster to just skip over the wdf than to decode it.
+				read_wdf(&pos, end, NULL);
+			}
 
-	pos = end;
-	RETURN(false);
-}
+		//	// If we hit the end of the chunk then last_did_in_chunk must be wrong.
+		//	Assert(false);
+		//}
+
+		//pos = end;
+		return false;
+	}
+};
+
+

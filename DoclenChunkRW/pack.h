@@ -2,17 +2,15 @@
 #include "string"
 
 #define SEPERATOR ((unsigned)-1)
-#define DOCLEN_CHUNK_SKIPLIST 1u
-#define DOCLEN_CHUNK_FIXEDWIDTH 2u
-#define DOCLEN_CHUNK_MIN_SKIPLIST_LENGTH 8
 #define DOCLEN_CHUNK_MIN_CONTIGUOUS_LENGTH 5
-#define DOCLEN_CHUNK_MIN_CONTIGUOUS_BLOCKS 1
-#define DOCLEN_CHUNK_MIN_CONTIGUOUS_PRECENTAGE 0.5
 #define DOCLEN_CHUNK_MIN_GOOD_BYTES_RATIO 0.8
+#define ENTRIES_IN_CHUNK 2000
 
 
 typedef unsigned docid;
 typedef unsigned doclen;
+typedef unsigned doccount;
+typedef unsigned termcount;
 
 using std::string;
 
@@ -130,14 +128,33 @@ bool unpack_uint_in_bytes( const char** pos, int n_bytes, U* result )
 	return true;
 }
 
-template<class U>
-inline
-bool read_chunk_header( const char** pos, const char* end, U* format_info )
+/** Append an encoded bool to a string.
+ *
+ *  @param s		The string to append to.
+ *  @param value	The bool to encode.
+ */
+inline void
+pack_bool(std::string & s, bool value)
 {
-	U u=0;
-	if ( format_info == NULL )
-	{
-		format_info = &u;
-	}
-	return unpack_uint( pos,end,format_info );
+    s += char('0' | static_cast<char>(value));
+}
+
+/** Decode a bool from a string.
+ *
+ *  @param p	    Pointer to pointer to the current position in the string.
+ *  @param end	    Pointer to the end of the string.
+ *  @param result   Where to store the result.
+ */
+inline bool
+unpack_bool(const char ** p, const char * end, bool * result)
+{
+    const char * & ptr = *p;
+
+    char ch;
+    if (ptr == end || ((ch = *ptr++ - '0') &~ 1)) {
+	ptr = NULL;
+	return false;
+    }
+    *result = static_cast<bool>(ch);
+    return true;
 }

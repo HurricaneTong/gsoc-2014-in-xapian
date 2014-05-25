@@ -1,19 +1,24 @@
 #include "FixedWidthChunk.h"
-#include "SkipList.h"
 #include "pack.h"
 #include "string"
 #include "map"
+#include "vector"
 
 using std::string;
 using std::map;
+using std::vector;
 
 class DoclenChunkReader;
 class DoclenChunkWriter;
+
+typedef pair<string,string> b_tree_node;
+typedef vector<b_tree_node> b_tree;
 
 class DoclenChunkWriter
 {
 private:
 	string& chunk;
+	b_tree bt;
 public:
 	DoclenChunkWriter( string& chunk_ )
 		: chunk(chunk_)
@@ -28,13 +33,11 @@ class DoclenChunkReader
 private:
 	string chunk;
 	unsigned format_info;
+	FixedWidthChunkReader fwcr;
 public:
 	DoclenChunkReader( const string& chunk_ )
-		: chunk(chunk_)
+		: chunk(chunk_), fwcr(chunk)
 	{
-		const char* pos = chunk.data();
-		const char* end = pos+chunk.size();
-		read_chunk_header( &pos,end,&format_info );
 	}
 	docid get_doclen( docid desired_did );
 };

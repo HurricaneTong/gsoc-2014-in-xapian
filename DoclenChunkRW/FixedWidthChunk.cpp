@@ -16,6 +16,75 @@ unsigned get_max_bytes( unsigned n )
 	return l;
 }
 
+void read_number_of_entries(const char ** posptr,
+							const char * end,
+							doccount * number_of_entries_ptr,
+							termcount * collection_freq_ptr)
+{
+	unpack_uint(posptr, end, number_of_entries_ptr);
+	unpack_uint(posptr, end, collection_freq_ptr);
+}
+
+
+
+static docid
+	read_start_of_chunk(const char ** posptr,
+	const char * end,
+	docid first_did_in_chunk,
+	bool * is_last_chunk_ptr)
+{
+
+	// Read whether this is the last chunk
+	unpack_bool(posptr, end, is_last_chunk_ptr);
+
+	// Read what the final document ID in this chunk is.
+	docid increase_to_last;
+	unpack_uint(posptr, end, &increase_to_last);
+	docid last_did_in_chunk = first_did_in_chunk + increase_to_last;
+	return last_did_in_chunk;
+}
+
+
+static docid
+	read_start_of_first_chunk(const char ** posptr,
+	const char * end,
+	doccount * number_of_entries_ptr,
+	termcount * collection_freq_ptr)
+{
+	read_number_of_entries(posptr, end,
+		number_of_entries_ptr, collection_freq_ptr);
+
+	docid did;
+	// Read the docid of the first entry in the posting list.
+	unpack_uint(posptr, end, &did);
+	return did;
+}
+
+
+static string
+	make_start_of_first_chunk(doccount entries,
+	termcount collectionfreq,
+	docid new_did)
+{
+	string chunk;
+	pack_uint(chunk, entries);
+	pack_uint(chunk, collectionfreq);
+	pack_uint(chunk, new_did);
+	return chunk;
+}
+
+static inline string
+	make_start_of_chunk(bool new_is_last_chunk,
+	docid new_first_did,
+	docid new_final_did)
+{
+	string chunk;
+	pack_bool(chunk, new_is_last_chunk);
+	pack_uint(chunk, new_final_did - new_first_did);
+	return chunk;
+}
+
+
 FixedWidthChunk::FixedWidthChunk( const map<docid,doclen>& postlist )
 {
 	buildVector( postlist );
@@ -26,6 +95,8 @@ bool FixedWidthChunk::buildVector( const map<docid,doclen>& postlist )
 	map<docid,doclen>::const_iterator it = postlist.begin(), start_pos;
 	bias = it->first;
 	docid docid_before_start_pos = it->first;
+
+	int chunk_size = 0;
 
 	while ( it!=postlist.end() )
 	{
@@ -66,6 +137,7 @@ bool FixedWidthChunk::buildVector( const map<docid,doclen>& postlist )
 			src.push_back(start_pos->first-docid_before_start_pos);	
 			src.push_back(length_contiguous);
 			src.push_back(max_bytes);
+
 			while ( start_pos!=it )
 			{
 				src.push_back(start_pos->second);
@@ -91,7 +163,6 @@ bool FixedWidthChunk::buildVector( const map<docid,doclen>& postlist )
 bool FixedWidthChunk::encode( string& chunk ) const
 {
 	int i=0;
-	pack_uint( chunk, DOCLEN_CHUNK_FIXEDWIDTH );
 	pack_uint( chunk, bias );
 	while ( i<(int)src.size() )
 	{
@@ -130,8 +201,6 @@ doclen FixedWidthChunkReader::getDoclen( docid desired_did )
 	{
 		pos = chunk.data();
 		end = pos+chunk.size();
-		unsigned format_info = 0;
-		unpack_uint( &pos, end, &format_info );
 		cur_did = 0;
 		unpack_uint( &pos, end, &cur_did );
 	}
@@ -159,12 +228,16 @@ doclen FixedWidthChunkReader::getDoclen( docid desired_did )
 			unsigned len=0, bytes=0;
 			unpack_uint_in_bytes( &pos, 2, &len );
 			unpack_uint_in_bytes( &pos, 1, &bytes );
+			docid old_cur_did = cur_did;
 			cur_did += incre_did;
 			if ( desired_did <= cur_did+len-1 )
 			{
 				pos += bytes*(desired_did-cur_did);
-				unpack_uint_in_bytes( &pos, bytes, &doc_length );
+				unpack_uint_in_bytes( &pos, bytes, &doc_length );			
+				
 				pos = old_pos;
+				cur_did = old_cur_did;
+
 				return doc_length;
 			}
 			pos += bytes*len;
@@ -183,7 +256,6 @@ bool FixedWidthChunkWriter::merge_doclen_change( const map<docid,doclen>& change
 	map<docid,doclen> original_postlist;
 	docid bias = 0, cur_did = 0, inc_did = 0;
 	doclen doc_len = 0;
-	read_chunk_header( &pos,end, (unsigned*)NULL );
 	unpack_uint( &pos, end, &bias );
 	cur_did = bias;
 	while ( pos!=end )
@@ -256,12 +328,10 @@ bool FixedWidthChunkWriter::merge_doclen_change( const map<docid,doclen>& change
 		++chg_it;
 	}
 
-	/*for ( ; it!=changes.end() ; ++it )
-	{
-		original_postlist[it->first] = it->second;
-	}*/
 	chunk.clear();
 	FixedWidthChunk fwc( original_postlist );
 	fwc.encode( chunk );
 	return true;
 }
+
+
