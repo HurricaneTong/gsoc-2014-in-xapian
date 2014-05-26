@@ -3,7 +3,6 @@
 #include "string"
 #include "map"
 #include "vector"
-#include "iostream"
 
 using std::string;
 using std::map;
@@ -15,14 +14,25 @@ class DoclenChunkWriter;
 class DoclenChunkWriter
 {
 private:
-	string& chunk;
-public:
-	DoclenChunkWriter( string& chunk_ )
-		: chunk(chunk_)
-	{
 
+	const string& chunk_from;
+	const map<docid,doclen>& changes;
+	BTree* b_tree;
+	bool is_first_chunk;
+	bool is_last_chunk;
+	map<docid,doclen> new_doclen;
+
+	bool get_new_doclen( const map<docid,doclen>*& p_new_doclen );
+public:
+	DoclenChunkWriter( const string& chunk_from_, 
+		const map<docid,doclen>& changes_, 
+		BTree* b_tree_,
+		bool is_first_chunk_ )
+		: chunk_from(chunk_from_), changes(changes_), b_tree(b_tree_), is_first_chunk(is_first_chunk_)
+	{
+		is_last_chunk = true;
 	}
-	bool merge_doclen_changes( const map<docid,doclen>& changes );
+	bool merge_doclen_changes( );
 };
 
 class DoclenChunkReader

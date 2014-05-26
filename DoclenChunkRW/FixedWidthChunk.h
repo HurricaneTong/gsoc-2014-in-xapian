@@ -42,13 +42,13 @@ public:
 	doclen getDoclen( docid desired_did );
 };
 
-class FixedWidthChunkWriter
-{
-private:
-	string& chunk;
-public:
-	FixedWidthChunkWriter( string& chunk_ )
-		: chunk(chunk_)
-	{};
-	bool merge_doclen_change( const map<docid,doclen>& changes );
-};
+//class FixedWidthChunkWriter
+//{
+//private:
+//	string& chunk;
+//public:
+//	FixedWidthChunkWriter( string& chunk_ )
+//		: chunk(chunk_)
+//	{};
+//	bool merge_doclen_change( const map<docid,doclen>& changes );
+//};

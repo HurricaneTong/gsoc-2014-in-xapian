@@ -1,18 +1,35 @@
 #pragma once
 #include "string"
+#include "map"
 
 #define SEPERATOR ((unsigned)-1)
 #define DOCLEN_CHUNK_MIN_CONTIGUOUS_LENGTH 5
 #define DOCLEN_CHUNK_MIN_GOOD_BYTES_RATIO 0.8
-#define ENTRIES_IN_CHUNK 2000
+#define MAX_ENTRIES_IN_CHUNK 2000
 
 
 typedef unsigned docid;
 typedef unsigned doclen;
 typedef unsigned doccount;
 typedef unsigned termcount;
+typedef std::map<std::string,std::string> BTree;
 
 using std::string;
+
+/** How many bits to store the length of a sortable uint in.
+ *
+ *  Setting this to 2 limits us to 2**32 documents in the database.  If set
+ *  to 3, then 2**64 documents are possible, but the database format isn't
+ *  compatible.
+ */
+const unsigned int SORTABLE_UINT_LOG2_MAX_BYTES = 2;
+
+/// Calculated value used below.
+const unsigned int SORTABLE_UINT_MAX_BYTES = 1 << SORTABLE_UINT_LOG2_MAX_BYTES;
+
+/// Calculated value used below.
+const unsigned int SORTABLE_UINT_1ST_BYTE_MASK =
+	(0xffu >> SORTABLE_UINT_LOG2_MAX_BYTES);
 
 template<class U>
 inline void
@@ -157,4 +174,118 @@ unpack_bool(const char ** p, const char * end, bool * result)
     }
     *result = static_cast<bool>(ch);
     return true;
+}
+
+/** Append an encoded unsigned integer to a string, preserving the sort order.
+ *
+ *  The appended string data will sort in the same order as the unsigned
+ *  integer being encoded.
+ *
+ *  Note that the first byte of the encoding will never be \xff, so it is
+ *  safe to store the result of this function immediately after the result of
+ *  pack_string_preserving_sort().
+ *
+ *  @param s		The string to append to.
+ *  @param value	The unsigned integer to encode.
+ */
+template<class U>
+inline void
+pack_uint_preserving_sort(std::string & s, U value)
+{
+    // Check U is an unsigned type.
+
+    char tmp[sizeof(U) + 1];
+    char * p = tmp + sizeof(tmp);
+
+    do {
+	*--p = char(value & 0xff);
+	value >>= 8;
+    } while (value &~ SORTABLE_UINT_1ST_BYTE_MASK);
+
+    unsigned char len = static_cast<unsigned char>(tmp + sizeof(tmp) - p);
+    *--p = char((len - 1) << (8 - SORTABLE_UINT_LOG2_MAX_BYTES) | value);
+    s.append(p, len + 1);
+}
+
+
+/** Append an encoded std::string to a string, preserving the sort order.
+ *
+ *  The byte which follows this encoded value *must not* be \xff, or the sort
+ *  order won't be correct.  You may need to store a padding byte (\0 say) to
+ *  ensure this.  Note that pack_uint_preserving_sort() can never produce
+ *  \xff as its first byte so is safe to use immediately afterwards.
+ *
+ *  @param s		The string to append to.
+ *  @param value	The std::string to encode.
+ *  @param last		If true, this is the last thing to be encoded in this
+ *			string - see note below (default: false)
+ *
+ *  It doesn't make sense to use pack_string_preserving_sort() if nothing can
+ *  ever follow, but if optional items can, you can set last=true in cases
+ *  where nothing does and get a shorter encoding in those cases.
+ */
+inline void
+pack_string_preserving_sort(std::string & s, const std::string & value,
+			    bool last = false)
+{
+    std::string::size_type b = 0, e;
+    while ((e = value.find('\0', b)) != std::string::npos) {
+	++e;
+	s.append(value, b, e - b);
+	s += '\xff';
+	b = e;
+    }
+    s.append(value, b, std::string::npos);
+    if (!last) s += '\0';
+}
+
+
+inline std::string
+	pack_chert_postlist_key(const std::string &term)
+{
+	// Special case for doclen lists.
+	if (term.empty())
+		return std::string("\x00\xe0", 2);
+
+	std::string key;
+	pack_string_preserving_sort(key, term, true);
+	return key;
+}
+
+inline std::string
+	pack_chert_postlist_key(const std::string &term, docid did)
+{
+	// Special case for doclen lists.
+	if (term.empty()) {
+		std::string key("\x00\xe0", 2);
+		pack_uint_preserving_sort(key, did);
+		return key;
+	}
+
+	std::string key;
+	pack_string_preserving_sort(key, term);
+	pack_uint_preserving_sort(key, did);
+	return key;
+}
+
+inline std::string
+	pack_brass_postlist_key(const std::string &term)
+{
+	return pack_chert_postlist_key(term);
+}
+
+inline std::string
+	pack_brass_postlist_key(const std::string &term, docid did)
+{
+	return pack_chert_postlist_key(term, did);
+}
+
+/// Compose a key from a termname and docid.
+static string make_key(const string & term, docid did) {
+	return pack_brass_postlist_key(term, did);
+}
+
+/// Compose a key from a termname.
+static string make_key(const string & term) {
+	return pack_brass_postlist_key(term);
 }

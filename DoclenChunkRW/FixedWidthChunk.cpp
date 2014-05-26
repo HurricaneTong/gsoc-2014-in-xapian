@@ -16,75 +16,6 @@ unsigned get_max_bytes( unsigned n )
 	return l;
 }
 
-void read_number_of_entries(const char ** posptr,
-							const char * end,
-							doccount * number_of_entries_ptr,
-							termcount * collection_freq_ptr)
-{
-	unpack_uint(posptr, end, number_of_entries_ptr);
-	unpack_uint(posptr, end, collection_freq_ptr);
-}
-
-
-
-static docid
-	read_start_of_chunk(const char ** posptr,
-	const char * end,
-	docid first_did_in_chunk,
-	bool * is_last_chunk_ptr)
-{
-
-	// Read whether this is the last chunk
-	unpack_bool(posptr, end, is_last_chunk_ptr);
-
-	// Read what the final document ID in this chunk is.
-	docid increase_to_last;
-	unpack_uint(posptr, end, &increase_to_last);
-	docid last_did_in_chunk = first_did_in_chunk + increase_to_last;
-	return last_did_in_chunk;
-}
-
-
-static docid
-	read_start_of_first_chunk(const char ** posptr,
-	const char * end,
-	doccount * number_of_entries_ptr,
-	termcount * collection_freq_ptr)
-{
-	read_number_of_entries(posptr, end,
-		number_of_entries_ptr, collection_freq_ptr);
-
-	docid did;
-	// Read the docid of the first entry in the posting list.
-	unpack_uint(posptr, end, &did);
-	return did;
-}
-
-
-static string
-	make_start_of_first_chunk(doccount entries,
-	termcount collectionfreq,
-	docid new_did)
-{
-	string chunk;
-	pack_uint(chunk, entries);
-	pack_uint(chunk, collectionfreq);
-	pack_uint(chunk, new_did);
-	return chunk;
-}
-
-static inline string
-	make_start_of_chunk(bool new_is_last_chunk,
-	docid new_first_did,
-	docid new_final_did)
-{
-	string chunk;
-	pack_bool(chunk, new_is_last_chunk);
-	pack_uint(chunk, new_final_did - new_first_did);
-	return chunk;
-}
-
-
 FixedWidthChunk::FixedWidthChunk( const map<docid,doclen>& postlist )
 {
 	buildVector( postlist );
@@ -248,90 +179,90 @@ doclen FixedWidthChunkReader::getDoclen( docid desired_did )
 	return -1;
 }
 
-bool FixedWidthChunkWriter::merge_doclen_change( const map<docid,doclen>& changes )
-{
-	map<docid,doclen>::const_iterator it = changes.begin();
-	const char* pos = chunk.data();
-	const char* end = pos+chunk.size();
-	map<docid,doclen> original_postlist;
-	docid bias = 0, cur_did = 0, inc_did = 0;
-	doclen doc_len = 0;
-	unpack_uint( &pos, end, &bias );
-	cur_did = bias;
-	while ( pos!=end )
-	{
-		unpack_uint( &pos, end, &inc_did );
-		if ( inc_did != SEPERATOR )
-		{
-			cur_did += inc_did;
-			unpack_uint( &pos, end, &doc_len );
-			original_postlist[cur_did] = doc_len;
-			continue;
-		}
-		else
-		{
-			unpack_uint( &pos, end, &inc_did );
-			unsigned len=0, bytes=0;
-			unpack_uint_in_bytes( &pos, 2, &len );
-			unpack_uint_in_bytes( &pos, 1, &bytes );
-			cur_did += inc_did;
-			while ( len-- )
-			{
-				unpack_uint_in_bytes( &pos, bytes, &doc_len );
-				original_postlist[cur_did] = doc_len;
-				cur_did++;
-			}
-			cur_did--;
-		}
-
-	}
-
-	map<docid,doclen>::const_iterator chg_it = changes.begin();
-	map<docid,doclen>::iterator ori_it = original_postlist.begin();
-
-	while ( chg_it != changes.end() )
-	{
-		while ( chg_it->first > ori_it->first )
-		{
-			++ori_it;
-			if ( ori_it == original_postlist.end() )
-			{
-				break;
-			}
-		}
-		if ( ori_it == original_postlist.end() )
-		{
-			original_postlist.insert( ori_it, *chg_it );
-			++chg_it;
-			while ( chg_it != changes.end() )
-			{
-				original_postlist.insert( ori_it, *chg_it );
-				++chg_it;
-			}
-			break;
-		}
-		if ( ori_it->first == chg_it->first )
-		{
-			if ( chg_it->second != SEPERATOR )
-			{
-				ori_it->second = chg_it->second;
-			}
-			else
-			{
-				ori_it = original_postlist.erase( ori_it );
-			}
-		}
-		else
-		{
-			original_postlist.insert( ori_it, *chg_it );
-		}
-		++chg_it;
-	}
-
-	chunk.clear();
-	FixedWidthChunk fwc( original_postlist );
-	fwc.encode( chunk );
-	return true;
-}
+//bool FixedWidthChunkWriter::merge_doclen_change( const map<docid,doclen>& changes )
+//{
+//	map<docid,doclen>::const_iterator it = changes.begin();
+//	const char* pos = chunk.data();
+//	const char* end = pos+chunk.size();
+//	map<docid,doclen> original_postlist;
+//	docid bias = 0, cur_did = 0, inc_did = 0;
+//	doclen doc_len = 0;
+//	unpack_uint( &pos, end, &bias );
+//	cur_did = bias;
+//	while ( pos!=end )
+//	{
+//		unpack_uint( &pos, end, &inc_did );
+//		if ( inc_did != SEPERATOR )
+//		{
+//			cur_did += inc_did;
+//			unpack_uint( &pos, end, &doc_len );
+//			original_postlist[cur_did] = doc_len;
+//			continue;
+//		}
+//		else
+//		{
+//			unpack_uint( &pos, end, &inc_did );
+//			unsigned len=0, bytes=0;
+//			unpack_uint_in_bytes( &pos, 2, &len );
+//			unpack_uint_in_bytes( &pos, 1, &bytes );
+//			cur_did += inc_did;
+//			while ( len-- )
+//			{
+//				unpack_uint_in_bytes( &pos, bytes, &doc_len );
+//				original_postlist[cur_did] = doc_len;
+//				cur_did++;
+//			}
+//			cur_did--;
+//		}
+//
+//	}
+//
+//	map<docid,doclen>::const_iterator chg_it = changes.begin();
+//	map<docid,doclen>::iterator ori_it = original_postlist.begin();
+//
+//	while ( chg_it != changes.end() )
+//	{
+//		while ( chg_it->first > ori_it->first )
+//		{
+//			++ori_it;
+//			if ( ori_it == original_postlist.end() )
+//			{
+//				break;
+//			}
+//		}
+//		if ( ori_it == original_postlist.end() )
+//		{
+//			original_postlist.insert( ori_it, *chg_it );
+//			++chg_it;
+//			while ( chg_it != changes.end() )
+//			{
+//				original_postlist.insert( ori_it, *chg_it );
+//				++chg_it;
+//			}
+//			break;
+//		}
+//		if ( ori_it->first == chg_it->first )
+//		{
+//			if ( chg_it->second != SEPERATOR )
+//			{
+//				ori_it->second = chg_it->second;
+//			}
+//			else
+//			{
+//				ori_it = original_postlist.erase( ori_it );
+//			}
+//		}
+//		else
+//		{
+//			original_postlist.insert( ori_it, *chg_it );
+//		}
+//		++chg_it;
+//	}
+//
+//	chunk.clear();
+//	FixedWidthChunk fwc( original_postlist );
+//	fwc.encode( chunk );
+//	return true;
+//}
 
 

@@ -28,7 +28,7 @@ void inputMap( map<docid,doclen>& postlist )
 	//{
 	//	postlist[i]=256+3*i;
 	//}
-	ifstream in( "email.doclens" );
+	ifstream in( "archives.doclens" );
 	docid did = 0;
 	doclen len = 0;
 	while ( !in.eof() )
@@ -152,12 +152,13 @@ int main()
 {
 	map<docid,doclen> postlist, changes;
 	string chunk, chunk2;
+	BTree b_tree;
 	double t1=0, t2=0;
 
 	inputMap(postlist);
-	DoclenChunkWriter dcw(chunk);
+	DoclenChunkWriter dcw(chunk,postlist,&b_tree,true);
 	t1=clock();
-	dcw.merge_doclen_changes(postlist);
+	dcw.merge_doclen_changes();
 	t2=clock();
 	cout << "Fixed Width (merge changes): " << t2-t1 << endl;
 	t1=clock();
@@ -167,7 +168,8 @@ int main()
 	test( postlist,chunk, chunk2 );
 
 	inputChanges(changes);
-	dcw.merge_doclen_changes(changes);
+	DoclenChunkWriter dcw2(chunk,changes,&b_tree,true);
+	dcw2.merge_doclen_changes();
 	chunk2 = merge_doclen_changes(changes,chunk2);
 
 	mergeChanges(postlist,changes);
