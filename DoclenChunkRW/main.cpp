@@ -11,33 +11,33 @@ using namespace std;
 
 void inputMap( map<docid,doclen>& postlist )
 {
-	//postlist[4]=5;
-	//postlist[6]=254;
-	//postlist[8]=1024;
-	//for ( int i=9 ; i<18 ; ++i )
-	//{
-	//	postlist[i]=2*i;
-	//}
-	//postlist[27]=32;
-	//postlist[35]=68;
-	//for ( int i=40 ; i<42 ; ++i )
-	//{
-	//	postlist[i]=i-39;
-	//}
-	//for ( int i=47; i<52 ; ++i )
-	//{
-	//	postlist[i]=256+3*i;
-	//}
-	ifstream in( "archives.doclens" );
-	docid did = 0;
-	doclen len = 0;
-	while ( !in.eof() )
+	postlist[4]=5;
+	postlist[6]=254;
+	postlist[8]=1024;
+	for ( int i=9 ; i<18 ; ++i )
 	{
-		in >> did >> len;
-		postlist[did] = len;
-
+		postlist[i]=2*i;
 	}
-	in.close();
+	postlist[27]=32;
+	postlist[35]=68;
+	for ( int i=40 ; i<42 ; ++i )
+	{
+		postlist[i]=i-39;
+	}
+	for ( int i=47; i<52 ; ++i )
+	{
+		postlist[i]=256+3*i;
+	}
+	//ifstream in( "archives.doclens" );
+	//docid did = 0;
+	//doclen len = 0;
+	//while ( !in.eof() )
+	//{
+	//	in >> did >> len;
+	//	postlist[did] = len;
+
+	//}
+	//in.close();
 
 }
 
@@ -60,7 +60,7 @@ void mergeChanges( map<docid,doclen>& postlist, const map<docid,doclen>& changes
 void calFixedWidth( const map<docid, doclen>& postlist, const string& chunk, int n_test, const vector<int>& indices )
 {
 	vector< pair<docid,doclen> > datas;
-	DoclenChunkReader cr( chunk );
+	DoclenChunkReader cr( chunk,true );
 	map<docid,doclen>::const_iterator it = postlist.begin();
 	for ( ; it!=postlist.end() ; ++it )
 	{
@@ -98,7 +98,7 @@ void calVariableWidth( const map<docid, doclen>& postlist, const string& chunk, 
 void test( const map<docid,doclen>& postlist, const string& chunk, const string& chunk2 )
 {
 	vector< pair<docid,doclen> > datas;
-	DoclenChunkReader cr( chunk );
+	DoclenChunkReader cr( chunk,true );
 	PostlistChunk pc(chunk2);
 	map<docid,doclen>::const_iterator it = postlist.begin();
 	for ( ; it!=postlist.end() ; ++it )
@@ -112,27 +112,27 @@ void test( const map<docid,doclen>& postlist, const string& chunk, const string&
 	{
 		indices.push_back(rand()%datas.size());
 	}
-	calFixedWidth(postlist,chunk,n_test,indices);
-	calVariableWidth(postlist,chunk2,n_test,indices);
+	//calFixedWidth(postlist,chunk,n_test,indices);
+	//calVariableWidth(postlist,chunk2,n_test,indices);
 
-	//for ( int i=0 ; i<(int)datas.size() ; ++i )
-	//{
-	//	doclen l1 = datas[i].second;
-	//	doclen l2 = cr.get_doclen( datas[i].first );
-	//	doclen l3 = pc.get_doc_length( datas[i].first );
-	//	if ( l1 != l2 )
-	//	{
-	//		cout << "chunk:" << endl;
-	//		cout << "@did " << datas[i].first << endl;
-	//		cout << l1 << " : " << l2 << endl;
-	//	}
-	//	if ( l1 != l3 )
-	//	{
-	//		cout << "chunk2:" << endl; 
-	//		cout << "@did " << datas[i].first << endl;
-	//		cout << l1 << " : " << l3 << endl;
-	//	}
-	//}
+	for ( int i=0 ; i<(int)datas.size() ; ++i )
+	{
+		doclen l1 = datas[i].second;
+		doclen l2 = cr.get_doclen( datas[i].first );
+		doclen l3 = pc.get_doc_length( datas[i].first );
+		if ( l1 != l2 )
+		{
+			cout << "chunk:" << endl;
+			cout << "@did " << datas[i].first << endl;
+			cout << l1 << " : " << l2 << endl;
+		}
+		if ( l1 != l3 )
+		{
+			cout << "chunk2:" << endl; 
+			cout << "@did " << datas[i].first << endl;
+			cout << l1 << " : " << l3 << endl;
+		}
+	}
 
 	return;
 }
@@ -165,7 +165,7 @@ int main()
 	chunk2 = merge_doclen_changes(postlist,chunk2);
 	t2=clock();
 	cout << "Original (merge changes) : " << t2-t1 << endl;
-	test( postlist,chunk, chunk2 );
+	test( postlist,b_tree.begin()->second, chunk2 );
 
 	inputChanges(changes);
 	DoclenChunkWriter dcw2(chunk,changes,&b_tree,true);

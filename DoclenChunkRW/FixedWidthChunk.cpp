@@ -130,8 +130,7 @@ doclen FixedWidthChunkReader::getDoclen( docid desired_did )
 	}
 	if ( cur_did > desired_did )
 	{
-		pos = chunk.data();
-		end = pos+chunk.size();
+		pos = start_pos;
 		cur_did = 0;
 		unpack_uint( &pos, end, &cur_did );
 	}

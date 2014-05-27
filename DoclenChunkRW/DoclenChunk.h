@@ -40,11 +40,16 @@ class DoclenChunkReader
 private:
 	string chunk;
 	unsigned format_info;
-	FixedWidthChunkReader fwcr;
+	FixedWidthChunkReader* p_fwcr;
 public:
-	DoclenChunkReader( const string& chunk_ )
-		: chunk(chunk_), fwcr(chunk)
+	DoclenChunkReader( const string& chunk_, bool is_first_chunk );
+	~DoclenChunkReader()
 	{
+		if ( p_fwcr!= NULL )
+		{
+			delete p_fwcr;
+			p_fwcr = NULL;
+		}
 	}
 	docid get_doclen( docid desired_did );
 };

@@ -177,13 +177,17 @@ bool DoclenChunkWriter::merge_doclen_changes( )
 	{
 		string cur_chunk;
 		FixedWidthChunk fwc( changes );
-		string head_of_first_chunk = 
-			make_start_of_first_chunk( changes.size(), 0, start_pos->first );
 		end_pos = p_new_doclen->end();
 		end_pos--;
-		string head_of_chunk = make_start_of_chunk( true,start_pos->first,end_pos->first );
-		cur_chunk += head_of_first_chunk+head_of_chunk;
+		string head_of_chunk = make_start_of_chunk( is_last_chunk,start_pos->first,end_pos->first );
+		cur_chunk = head_of_chunk+cur_chunk;
 		fwc.encode( cur_chunk );
+		if ( is_first_chunk )
+		{
+			string head_of_first_chunk = 
+				make_start_of_first_chunk( changes.size(), 0, start_pos->first );
+			cur_chunk = head_of_first_chunk+cur_chunk;
+		}
 
 		string cur_key = make_key( string(), start_pos->first );
 		b_tree->insert( make_pair(cur_key,cur_chunk) ); 
@@ -234,7 +238,7 @@ bool DoclenChunkWriter::merge_doclen_changes( )
 				cur_chunk = head_of_first_chunk+cur_chunk;
 			}
 
-			string cur_key = make_key( string(), it->first );
+			string cur_key = make_key( string(), doc_len_list[i].begin()->first );
 			b_tree->insert( make_pair(cur_key,cur_chunk) );
 
 		}
@@ -242,7 +246,21 @@ bool DoclenChunkWriter::merge_doclen_changes( )
 	return true;
 }
 
+DoclenChunkReader::DoclenChunkReader( const string& chunk_, bool is_first_chunk )
+	: chunk(chunk_)
+{
+	const char* pos = chunk.data();
+	const char* end = pos+chunk.size();
+	if ( is_first_chunk )
+	{
+		read_start_of_first_chunk( &pos, end, NULL, NULL );
+	}
+	bool is_last_chunk;
+	read_start_of_chunk( &pos, end, 0, &is_last_chunk );
+	p_fwcr = new FixedWidthChunkReader(pos,end);
+}
+
 docid DoclenChunkReader::get_doclen( docid desired_did )
 {
-	return fwcr.getDoclen(desired_did);
+	return p_fwcr->getDoclen(desired_did);
 }
