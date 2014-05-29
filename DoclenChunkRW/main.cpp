@@ -9,43 +9,80 @@
 
 using namespace std;
 
+string get_chunk( BTree& b_tree, docid desired_did, bool& is_first_chunk )
+{
+	map<string,string>::const_iterator it = b_tree.begin();
+	string cur_key;
+	string cur_chunk;
+	const char *kpos=NULL, *kend=NULL, *pos=NULL, *end=NULL;
+	docid first_did_in_chunk;
+	docid last_did_in_chunk;
+	bool is_last_chunk;
+	while ( it!=b_tree.end() )
+	{
+		cur_key=it->first;
+		cur_chunk=it->second;
+		kpos = cur_key.data();
+		kend = kpos+cur_key.size();
+		pos = cur_chunk.data();
+		end = pos+cur_chunk.size();
+		check_tname_in_key( &kpos, kend, string() );
+		is_first_chunk = kpos==kend ;
+		if ( is_first_chunk )
+		{
+			first_did_in_chunk = read_start_of_first_chunk( &pos, end, NULL, NULL );
+		}
+		else
+		{
+			unpack_uint_preserving_sort(&kpos, kend, &first_did_in_chunk);
+		}
+		last_did_in_chunk = read_start_of_chunk( &pos, end, first_did_in_chunk, &is_last_chunk );
+		++it;
+		if ( desired_did>=first_did_in_chunk && desired_did<=last_did_in_chunk )
+		{
+			return cur_chunk;
+		}
+	}
+	return string();
+}
+
 void inputMap( map<docid,doclen>& postlist )
 {
-	postlist[4]=5;
-	postlist[6]=254;
-	postlist[8]=1024;
-	for ( int i=9 ; i<18 ; ++i )
-	{
-		postlist[i]=2*i;
-	}
-	postlist[27]=32;
-	postlist[35]=68;
-	for ( int i=40 ; i<42 ; ++i )
-	{
-		postlist[i]=i-39;
-	}
-	for ( int i=47; i<52 ; ++i )
-	{
-		postlist[i]=256+3*i;
-	}
-	//ifstream in( "archives.doclens" );
-	//docid did = 0;
-	//doclen len = 0;
-	//while ( !in.eof() )
+	//postlist[4]=5;
+	//postlist[6]=254;
+	//postlist[8]=1024;
+	//for ( int i=9 ; i<18 ; ++i )
 	//{
-	//	in >> did >> len;
-	//	postlist[did] = len;
-
+	//	postlist[i]=2*i;
 	//}
-	//in.close();
+	//postlist[27]=32;
+	//postlist[35]=68;
+	//for ( int i=40 ; i<42 ; ++i )
+	//{
+	//	postlist[i]=i-39;
+	//}
+	//for ( int i=47; i<52 ; ++i )
+	//{
+	//	postlist[i]=256+3*i;
+	//}
+	ifstream in( "archives.doclens" );
+	docid did = 0;
+	doclen len = 0;
+	while ( !in.eof() )
+	{
+		in >> did >> len;
+		postlist[did] = len;
+
+	}
+	in.close();
 
 }
 
 void inputChanges( map<docid,doclen>& changes )
 {
 	changes[5] = 250;
-	changes[6] = 25;
-	changes[15] = 1025;
+	changes[7] = 25;
+	//changes[15] = 1025;
 }
 
 void mergeChanges( map<docid,doclen>& postlist, const map<docid,doclen>& changes )
@@ -95,10 +132,10 @@ void calVariableWidth( const map<docid, doclen>& postlist, const string& chunk, 
 
 }
 
-void test( const map<docid,doclen>& postlist, const string& chunk, const string& chunk2 )
+void test( const map<docid,doclen>& postlist, const string& chunk2, BTree& bt )
 {
 	vector< pair<docid,doclen> > datas;
-	DoclenChunkReader cr( chunk,true );
+	//DoclenChunkReader cr( chunk,true );
 	PostlistChunk pc(chunk2);
 	map<docid,doclen>::const_iterator it = postlist.begin();
 	for ( ; it!=postlist.end() ; ++it )
@@ -118,6 +155,15 @@ void test( const map<docid,doclen>& postlist, const string& chunk, const string&
 	for ( int i=0 ; i<(int)datas.size() ; ++i )
 	{
 		doclen l1 = datas[i].second;
+
+		bool is_first_chunk;
+		string chunk = get_chunk(bt,datas[i].first,is_first_chunk);
+		if (!chunk.size())
+		{
+			cout << "no such did! " << endl;
+			return;
+		}
+		DoclenChunkReader cr(chunk,is_first_chunk);
 		doclen l2 = cr.get_doclen( datas[i].first );
 		doclen l3 = pc.get_doc_length( datas[i].first );
 		if ( l1 != l2 )
@@ -165,15 +211,22 @@ int main()
 	chunk2 = merge_doclen_changes(postlist,chunk2);
 	t2=clock();
 	cout << "Original (merge changes) : " << t2-t1 << endl;
-	test( postlist,b_tree.begin()->second, chunk2 );
+	test( postlist, chunk2, b_tree );
+
 
 	inputChanges(changes);
-	DoclenChunkWriter dcw2(chunk,changes,&b_tree,true);
+
+	string des_chunk;
+	bool is_first_chunk;
+	des_chunk = get_chunk(b_tree,5,is_first_chunk);
+	map<string,string>::iterator it = b_tree.find(make_key(string()));
+	b_tree.erase(it);
+	DoclenChunkWriter dcw2(des_chunk,changes,&b_tree,is_first_chunk);
 	dcw2.merge_doclen_changes();
 	chunk2 = merge_doclen_changes(changes,chunk2);
 
 	mergeChanges(postlist,changes);
-	test( postlist, chunk, chunk2 );
+	test( postlist, chunk2, b_tree );
 
 	return 0;
 }

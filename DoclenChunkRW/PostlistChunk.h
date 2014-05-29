@@ -1,3 +1,4 @@
+#pragma once
 #include "pack.h"
 #include "map"
 #include "string"

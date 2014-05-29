@@ -207,6 +207,50 @@ pack_uint_preserving_sort(std::string & s, U value)
     s.append(p, len + 1);
 }
 
+/** Decode an "sort preserved" unsigned integer from a string.
+ *
+ *  The unsigned integer must have been encoded with
+ *  pack_uint_preserving_sort().
+ *
+ *  @param p	    Pointer to pointer to the current position in the string.
+ *  @param end	    Pointer to the end of the string.
+ *  @param result   Where to store the result.
+ */
+template<class U>
+inline bool
+unpack_uint_preserving_sort(const char ** p, const char * end, U * result)
+{
+    // Check U is an unsigned type.
+    const char * ptr = *p;
+
+
+    if (ptr == end) {
+	return false;
+    }
+
+    unsigned char len_byte = static_cast<unsigned char>(*ptr++);
+    *result = len_byte & SORTABLE_UINT_1ST_BYTE_MASK;
+    size_t len = (len_byte >> (8 - SORTABLE_UINT_LOG2_MAX_BYTES)) + 1;
+
+    if (size_t(end - ptr) < len) {
+	return false;
+    }
+
+    end = ptr + len;
+    *p = end;
+
+    // Check for overflow.
+    if (len > int(sizeof(U))) {
+	return false;
+    }
+
+    while (ptr != end) {
+	*result = (*result << 8) | U(static_cast<unsigned char>(*ptr++));
+    }
+
+    return true;
+}
+
 
 /** Append an encoded std::string to a string, preserving the sort order.
  *
@@ -288,4 +332,109 @@ static string make_key(const string & term, docid did) {
 /// Compose a key from a termname.
 static string make_key(const string & term) {
 	return pack_brass_postlist_key(term);
+}
+
+/** Decode a "sort preserved" std::string from a string.
+ *
+ *  The std::string must have been encoded with pack_string_preserving_sort().
+ *
+ *  @param p	    Pointer to pointer to the current position in the string.
+ *  @param end	    Pointer to the end of the string.
+ *  @param result   Where to store the result.
+ */
+inline bool
+unpack_string_preserving_sort(const char ** p, const char * end,
+			      std::string & result)
+{
+    result.resize(0);
+
+    const char *ptr = *p;
+
+    while (ptr != end) {
+	char ch = *ptr++;
+	if (ch == '\0') {
+	    if (ptr == end || *ptr != '\xff') {
+		break;
+	    }
+	    ++ptr;
+	}
+	result += ch;
+    }
+    *p = ptr;
+    return true;
+}
+
+
+
+static inline bool get_tname_from_key(const char **src, const char *end,
+									  string &tname)
+{
+	return unpack_string_preserving_sort(src, end, tname);
+}
+
+static inline bool
+	check_tname_in_key_lite(const char **keypos, const char *keyend, const string &tname)
+{
+	string tname_in_key;
+
+	if (keyend - *keypos >= 2 && (*keypos)[0] == '\0' && (*keypos)[1] == '\xe0') {
+		*keypos += 2;
+	} else {
+		// Read the termname.
+		get_tname_from_key(keypos, keyend, tname_in_key);
+	}
+
+	// This should only fail if the postlist doesn't exist at all.
+	return tname_in_key == tname;
+}
+
+static inline bool
+	check_tname_in_key(const char **keypos, const char *keyend, const string &tname)
+{
+	if (*keypos == keyend) return false;
+
+	return check_tname_in_key_lite(keypos, keyend, tname);
+}
+
+
+static void read_number_of_entries(const char ** posptr,
+							const char * end,
+							doccount * number_of_entries_ptr,
+							termcount * collection_freq_ptr)
+{
+	unpack_uint(posptr, end, number_of_entries_ptr);
+	unpack_uint(posptr, end, collection_freq_ptr);
+}
+
+static docid
+	read_start_of_chunk(const char ** posptr,
+	const char * end,
+	docid first_did_in_chunk,
+	bool * is_last_chunk_ptr)
+{
+
+	// Read whether this is the last chunk
+	unpack_bool(posptr, end, is_last_chunk_ptr);
+
+	// Read what the final document ID in this chunk is.
+	docid increase_to_last;
+	unpack_uint(posptr, end, &increase_to_last);
+	docid last_did_in_chunk = first_did_in_chunk + increase_to_last;
+	return last_did_in_chunk;
+}
+
+
+static docid
+	read_start_of_first_chunk(const char ** posptr,
+	const char * end,
+	doccount * number_of_entries_ptr,
+	termcount * collection_freq_ptr)
+{
+	read_number_of_entries(posptr, end,
+		number_of_entries_ptr, collection_freq_ptr);
+
+	docid did;
+	// Read the docid of the first entry in the posting list.
+	unpack_uint(posptr, end, &did);
+	return did;
 }

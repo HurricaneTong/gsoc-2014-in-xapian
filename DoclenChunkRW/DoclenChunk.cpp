@@ -1,48 +1,5 @@
 #include "DoclenChunk.h"
 
-void read_number_of_entries(const char ** posptr,
-							const char * end,
-							doccount * number_of_entries_ptr,
-							termcount * collection_freq_ptr)
-{
-	unpack_uint(posptr, end, number_of_entries_ptr);
-	unpack_uint(posptr, end, collection_freq_ptr);
-}
-
-
-static docid
-	read_start_of_chunk(const char ** posptr,
-	const char * end,
-	docid first_did_in_chunk,
-	bool * is_last_chunk_ptr)
-{
-
-	// Read whether this is the last chunk
-	unpack_bool(posptr, end, is_last_chunk_ptr);
-
-	// Read what the final document ID in this chunk is.
-	docid increase_to_last;
-	unpack_uint(posptr, end, &increase_to_last);
-	docid last_did_in_chunk = first_did_in_chunk + increase_to_last;
-	return last_did_in_chunk;
-}
-
-
-static docid
-	read_start_of_first_chunk(const char ** posptr,
-	const char * end,
-	doccount * number_of_entries_ptr,
-	termcount * collection_freq_ptr)
-{
-	read_number_of_entries(posptr, end,
-		number_of_entries_ptr, collection_freq_ptr);
-
-	docid did;
-	// Read the docid of the first entry in the posting list.
-	unpack_uint(posptr, end, &did);
-	return did;
-}
-
 
 static string
 	make_start_of_first_chunk(doccount entries,
@@ -214,7 +171,7 @@ bool DoclenChunkWriter::merge_doclen_changes( )
 
 		for ( int i=0 ; i<(int)doc_len_list.size() ; ++i )
 		{
-			string cur_chunk;
+			string cur_chunk, cur_key;
 			map<docid,doclen>::iterator it = doc_len_list[i].end();
 			it--;
 			if ( i==(int)doc_len_list.size()-1 && is_last_chunk )
@@ -234,11 +191,15 @@ bool DoclenChunkWriter::merge_doclen_changes( )
 			if ( i==0 && is_first_chunk ) 
 			{
 				string head_of_first_chunk =
-					make_start_of_first_chunk( p_new_doclen->size(), 0, it->first );
+					make_start_of_first_chunk( p_new_doclen->size(), 0, doc_len_list[i].begin()->first );
 				cur_chunk = head_of_first_chunk+cur_chunk;
+				cur_key = make_key( string() );
+			}
+			else
+			{
+				cur_key = make_key( string(), doc_len_list[i].begin()->first );
 			}
 
-			string cur_key = make_key( string(), doc_len_list[i].begin()->first );
 			b_tree->insert( make_pair(cur_key,cur_chunk) );
 
 		}

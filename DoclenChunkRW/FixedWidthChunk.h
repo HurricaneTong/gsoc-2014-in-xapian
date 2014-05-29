@@ -23,7 +23,6 @@ public:
 class FixedWidthChunkReader
 {
 private:
-	//const string& chunk;
 	const char* start_pos;
 	const char* pos;
 	const char* end;

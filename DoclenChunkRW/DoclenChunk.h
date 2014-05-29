@@ -1,3 +1,4 @@
+#pragma once
 #include "FixedWidthChunk.h"
 #include "pack.h"
 #include "string"
@@ -39,7 +40,6 @@ class DoclenChunkReader
 {
 private:
 	string chunk;
-	unsigned format_info;
 	FixedWidthChunkReader* p_fwcr;
 public:
 	DoclenChunkReader( const string& chunk_, bool is_first_chunk );
