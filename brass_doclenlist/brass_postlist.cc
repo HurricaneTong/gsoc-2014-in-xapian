@@ -488,7 +488,7 @@ bool DoclenChunkWriter::merge_doclen_changes( )
 		if ( is_first_chunk )
 		{
 			string head_of_first_chunk = 
-				make_start_of_first_chunk( changes.size(), 0, start_pos->first );
+				make_start_of_first_chunk( 0, 0, start_pos->first );
 			cur_chunk = head_of_first_chunk+cur_chunk;
 		}
 
@@ -538,7 +538,7 @@ bool DoclenChunkWriter::merge_doclen_changes( )
 			if ( i==0 && is_first_chunk ) 
 			{
 				string head_of_first_chunk =
-					make_start_of_first_chunk( p_new_doclen->size(), 0, doc_len_list[i].begin()->first );
+					make_start_of_first_chunk( 0, 0, doc_len_list[i].begin()->first );
 				cur_chunk = head_of_first_chunk+cur_chunk;
 				cur_key = make_key( string() );
 			}
@@ -1067,7 +1067,8 @@ BrassPostList::BrassPostList(intrusive_ptr<const BrassDatabase> this_db_,
 	  this_db(keep_reference ? this_db_ : NULL),
 	  have_started(false),
 	  is_at_end(false),
-	  cursor(this_db_->postlist_table.cursor_get())
+	  cursor(this_db_->postlist_table.cursor_get()),
+	  is_doclen_list(term_.empty()?true:false)
 {
     LOGCALL_CTOR(DB, "BrassPostList", this_db_.get() | term_ | keep_reference);
     init();
@@ -1080,7 +1081,8 @@ BrassPostList::BrassPostList(intrusive_ptr<const BrassDatabase> this_db_,
 	  this_db(this_db_),
 	  have_started(false),
 	  is_at_end(false),
-	  cursor(cursor_)
+	  cursor(cursor_),
+	  is_doclen_list(term_.empty()?true:false)
 {
     LOGCALL_CTOR(DB, "BrassPostList", this_db_.get() | term_ | cursor_);
     init();
@@ -1105,17 +1107,34 @@ BrassPostList::init()
     pos = cursor->current_tag.data();
     end = pos + cursor->current_tag.size();
 
+	is_first_chunk = true;
+
     did = read_start_of_first_chunk(&pos, end, &number_of_entries, NULL);
     first_did_in_chunk = did;
     last_did_in_chunk = read_start_of_chunk(&pos, end, first_did_in_chunk,
 					    &is_last_chunk);
-    read_wdf(&pos, end, &wdf);
+	if(!is_doclen_list)
+	{
+		read_wdf(&pos, end, &wdf);
+	}
+	if ( is_doclen_list )
+	{
+		did = 0;
+		wdf = 0;
+		p_doclen_chunk_reader = new DoclenChunkReader(cursor->current_tag,true);
+	}
+    
     LOGLINE(DB, "Initial docid " << did);
 }
 
 BrassPostList::~BrassPostList()
 {
     LOGCALL_DTOR(DB, "BrassPostList");
+	if ( p_doclen_chunk_reader )
+	{
+		delete p_doclen_chunk_reader;
+		p_doclen_chunk_reader = NULL;
+	}
 }
 
 LeafPostList *
@@ -1179,6 +1198,8 @@ BrassPostList::next_chunk()
 				     term + "'");
     }
 
+	is_first_chunk = false;
+
     Xapian::docid newdid;
     if (!unpack_uint_preserving_sort(&keypos, keyend, &newdid)) {
 	report_read_error(keypos);
@@ -1198,7 +1219,21 @@ BrassPostList::next_chunk()
     first_did_in_chunk = did;
     last_did_in_chunk = read_start_of_chunk(&pos, end, first_did_in_chunk,
 					    &is_last_chunk);
-    read_wdf(&pos, end, &wdf);
+	if ( !is_doclen_list )
+	{
+		read_wdf(&pos, end, &wdf);
+	}
+	if ( is_doclen_list )
+	{
+		did = 0;
+		wdf = 0;
+		if( p_doclen_chunk_reader )
+		{
+			delete p_doclen_chunk_reader;
+		}
+		p_doclen_chunk_reader = new DoclenChunkReader(cursor->current_tag,is_first_chunk);
+	}
+    
 }
 
 PositionList *
@@ -1268,6 +1303,8 @@ BrassPostList::move_to_chunk_containing(Xapian::docid desired_did)
     }
     is_at_end = false;
 
+	is_first_chunk = keypos==keyend;
+
     cursor->read_tag();
     pos = cursor->current_tag.data();
     end = pos + cursor->current_tag.size();
@@ -1291,7 +1328,21 @@ BrassPostList::move_to_chunk_containing(Xapian::docid desired_did)
     first_did_in_chunk = did;
     last_did_in_chunk = read_start_of_chunk(&pos, end, first_did_in_chunk,
 					    &is_last_chunk);
-    read_wdf(&pos, end, &wdf);
+	if ( !is_doclen_list )
+	{
+		read_wdf(&pos, end, &wdf);
+	}
+	if ( is_doclen_list )
+	{
+		did = 0;
+		wdf = 0;
+		if ( p_doclen_chunk_reader )
+		{
+			delete p_doclen_chunk_reader;
+		}
+		p_doclen_chunk_reader = new DoclenChunkReader(cursor->current_tag,is_first_chunk);
+	}
+    
 
     // Possible, since desired_did might be after end of this chunk and before
     // the next.
@@ -1384,8 +1435,17 @@ BrassPostList::jump_to(Xapian::docid desired_did)
     }
 
     // Move to correct position in chunk.
-    if (!move_forward_in_chunk_to_at_least(desired_did)) RETURN(false);
-    RETURN(desired_did == did);
+    //if (!move_forward_in_chunk_to_at_least(desired_did)) RETURN(false);
+    //RETURN(desired_did == did);
+	wdf = p_doclen_chunk_reader->get_doclen(desired_did);
+	if ( wdf == (Xapian::termcount)-1 )
+	{
+		wdf = 0;
+		did = 0;
+		RETURN(false);
+	}
+	did = desired_did;
+	RETURN(true);
 }
 
 string

@@ -114,7 +114,7 @@ public:
 class DoclenChunkReader
 {
 private:
-	string chunk;
+	string& chunk;
 	FixedWidthChunkReader* p_fwcr;
 public:
 	DoclenChunkReader( const string& chunk_, bool is_first_chunk );
@@ -215,6 +215,10 @@ class BrassPostList : public LeafPostList {
 
 	/// The position list object for this posting list.
 	BrassPositionList positionlist;
+
+	DoclenChunkReader* p_doclen_chunk_reader;
+	bool is_doclen_list;
+	bool is_first_chunk;
 
 	/// Whether we've started reading the list yet.
 	bool have_started;
