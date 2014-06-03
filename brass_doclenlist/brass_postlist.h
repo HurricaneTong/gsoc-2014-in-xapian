@@ -60,9 +60,9 @@ class FixedWidthChunk
 private:
 	vector<unsigned> src;
 	unsigned bias;
-	bool buildVector( const map<Xapian::docid,Xapian::doclen>& postlist );
+	bool buildVector( const map<Xapian::docid,Xapian::termcount>& postlist );
 public:
-	FixedWidthChunk( const map<Xapian::docid,Xapian::doclen>& postlist );
+	FixedWidthChunk( const map<Xapian::docid,Xapian::termcount>& postlist );
 	bool encode( string& chunk ) const;
 };
 
@@ -73,7 +73,7 @@ private:
 	const char* pos;
 	const char* end;
 	Xapian::docid cur_did;
-	Xapian::doclen doc_length;
+	Xapian::termcount doc_length;
 
 public:
 	FixedWidthChunkReader( const char* pos_, const char* end_ )
@@ -84,7 +84,7 @@ public:
 		doc_length = -1;
 		unpack_uint( &pos, end, &cur_did );
 	};
-	Xapian::doclen getDoclen( Xapian::docid desired_did );
+	Xapian::termcount getDoclen( Xapian::docid desired_did );
 };
 
 class DoclenChunkWriter
@@ -92,16 +92,16 @@ class DoclenChunkWriter
 private:
 
 	const string& chunk_from;
-	const map<Xapian::docid,Xapian::doclen>& changes;
+	const map<Xapian::docid,Xapian::termcount>& changes;
 	BrassPostListTable* postlist_table;
 	bool is_first_chunk;
 	bool is_last_chunk;
-	map<Xapian::docid,Xapian::doclen> new_doclen;
+	map<Xapian::docid,Xapian::termcount> new_doclen;
 
-	bool get_new_doclen( const map<Xapian::docid,Xapian::doclen>*& p_new_doclen );
+	bool get_new_doclen( const map<Xapian::docid,Xapian::termcount>*& p_new_doclen );
 public:
 	DoclenChunkWriter( const string& chunk_from_, 
-		const map<Xapian::docid,Xapian::doclen>& changes_, 
+		const map<Xapian::docid,Xapian::termcount>& changes_, 
 		BrassPostListTable* postlist_table_,
 		bool is_first_chunk_ )
 		: chunk_from(chunk_from_), changes(changes_), postlist_table(postlist_table_), is_first_chunk(is_first_chunk_)
@@ -114,7 +114,7 @@ public:
 class DoclenChunkReader
 {
 private:
-	string& chunk;
+	const string& chunk;
 	FixedWidthChunkReader* p_fwcr;
 public:
 	DoclenChunkReader( const string& chunk_, bool is_first_chunk );
@@ -216,10 +216,6 @@ class BrassPostList : public LeafPostList {
 	/// The position list object for this posting list.
 	BrassPositionList positionlist;
 
-	DoclenChunkReader* p_doclen_chunk_reader;
-	bool is_doclen_list;
-	bool is_first_chunk;
-
 	/// Whether we've started reading the list yet.
 	bool have_started;
 
@@ -252,6 +248,10 @@ class BrassPostList : public LeafPostList {
 
 	/// The number of entries in the posting list.
 	Xapian::doccount number_of_entries;
+
+	DoclenChunkReader* p_doclen_chunk_reader;
+	bool is_doclen_list;
+	bool is_first_chunk;
 
 	/// Copying is not allowed.
 	BrassPostList(const BrassPostList &);

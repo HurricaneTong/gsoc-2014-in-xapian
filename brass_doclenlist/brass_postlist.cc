@@ -207,18 +207,16 @@ write_start_of_chunk(string & chunk,
 }
 
 
-FixedWidthChunk::FixedWidthChunk( const map<Xapian::docid,Xapian::doclen>& postlist )
+FixedWidthChunk::FixedWidthChunk( const map<Xapian::docid,Xapian::termcount>& postlist )
 {
 	buildVector( postlist );
 }
 
-bool FixedWidthChunk::buildVector( const map<Xapian::docid,Xapian::doclen>& postlist )
+bool FixedWidthChunk::buildVector( const map<Xapian::docid,Xapian::termcount>& postlist )
 {
-	map<Xapian::docid,Xapian::doclen>::const_iterator it = postlist.begin(), start_pos;
+	map<Xapian::docid,Xapian::termcount>::const_iterator it = postlist.begin(), start_pos;
 	bias = it->first;
 	Xapian::docid docid_before_start_pos = it->first;
-
-	int chunk_size = 0;
 
 	while ( it!=postlist.end() )
 	{
@@ -241,7 +239,7 @@ bool FixedWidthChunk::buildVector( const map<Xapian::docid,Xapian::doclen>& post
 			}
 			used_bytes += max_bytes;
 			good_bytes += cur_bytes;
-			if ( (float)good_bytes/used_bytes < DOCLEN_CHUNK_MIN_GOOD_BYTES_RATIO )
+			if ( (double)good_bytes/used_bytes < DOCLEN_CHUNK_MIN_GOOD_BYTES_RATIO )
 			{
 				used_bytes = 0;
 				good_bytes = 0;
@@ -313,9 +311,9 @@ bool FixedWidthChunk::encode( string& chunk ) const
 	return true;
 }
 
-Xapian::doclen FixedWidthChunkReader::getDoclen( Xapian::docid desired_did )
+Xapian::termcount FixedWidthChunkReader::getDoclen( Xapian::docid desired_did )
 {
-	if ( cur_did==desired_did && doc_length!=-1 )
+	if ( cur_did==desired_did && doc_length!=(unsigned)-1 )
 	{
 		return doc_length;
 	}
@@ -370,7 +368,7 @@ Xapian::doclen FixedWidthChunkReader::getDoclen( Xapian::docid desired_did )
 }
 
 
-bool DoclenChunkWriter::get_new_doclen( const map<Xapian::docid,Xapian::doclen>*& p_new_doclen )
+bool DoclenChunkWriter::get_new_doclen( const map<Xapian::docid,Xapian::termcount>*& p_new_doclen )
 {
 	if ( chunk_from.empty() )
 	{
@@ -378,7 +376,6 @@ bool DoclenChunkWriter::get_new_doclen( const map<Xapian::docid,Xapian::doclen>*
 	}
 	else
 	{
-		map<Xapian::docid,Xapian::doclen>::const_iterator it = changes.begin();
 		const char* pos = chunk_from.data();
 		const char* end = pos+chunk_from.size();
 
@@ -389,7 +386,7 @@ bool DoclenChunkWriter::get_new_doclen( const map<Xapian::docid,Xapian::doclen>*
 		read_start_of_chunk( &pos, end, 0, &is_last_chunk ); 
 
 		Xapian::docid bias = 0, cur_did = 0, inc_did = 0;
-		Xapian::doclen doc_len = 0;
+		Xapian::termcount doc_len = 0;
 		unpack_uint( &pos, end, &bias );
 		cur_did = bias;
 		while ( pos!=end )
@@ -422,8 +419,8 @@ bool DoclenChunkWriter::get_new_doclen( const map<Xapian::docid,Xapian::doclen>*
 
 		}
 
-		map<Xapian::docid,Xapian::doclen>::const_iterator chg_it = changes.begin();
-		map<Xapian::docid,Xapian::doclen>::iterator ori_it = new_doclen.begin();
+		map<Xapian::docid,Xapian::termcount>::const_iterator chg_it = changes.begin();
+		map<Xapian::docid,Xapian::termcount>::iterator ori_it = new_doclen.begin();
 
 		while ( chg_it != changes.end() )
 		{
@@ -454,7 +451,8 @@ bool DoclenChunkWriter::get_new_doclen( const map<Xapian::docid,Xapian::doclen>*
 				}
 				else
 				{
-					ori_it = new_doclen.erase( ori_it );
+					//ori_it = new_doclen.erase( ori_it );
+					new_doclen.erase( ori_it++ );
 				}
 			}
 			else
@@ -471,10 +469,10 @@ bool DoclenChunkWriter::get_new_doclen( const map<Xapian::docid,Xapian::doclen>*
 
 bool DoclenChunkWriter::merge_doclen_changes( )
 {
-	const map<Xapian::docid,Xapian::doclen>* p_new_doclen = NULL;
+	const map<Xapian::docid,Xapian::termcount>* p_new_doclen = NULL;
 	get_new_doclen( p_new_doclen );
 
-	map<Xapian::docid,Xapian::doclen>::const_iterator start_pos, end_pos;
+	map<Xapian::docid,Xapian::termcount>::const_iterator start_pos, end_pos;
 	start_pos = end_pos = p_new_doclen->begin();
 	if ( p_new_doclen->size() <= MAX_ENTRIES_IN_CHUNK )
 	{
@@ -492,13 +490,13 @@ bool DoclenChunkWriter::merge_doclen_changes( )
 			cur_chunk = head_of_first_chunk+cur_chunk;
 		}
 
-		string cur_key = make_key( string(), start_pos->first );
+		string cur_key = BrassPostListTable::make_key( string(), start_pos->first );
 		postlist_table->add(cur_key,cur_chunk);
 		//b_tree->insert( make_pair(cur_key,cur_chunk) ); 
 	}
 	else
 	{
-		vector< map<Xapian::docid,Xapian::doclen> > doc_len_list;
+		vector< map<Xapian::docid,Xapian::termcount> > doc_len_list;
 		int count = 0;
 		while ( end_pos!=p_new_doclen->end() )
 		{
@@ -506,20 +504,20 @@ bool DoclenChunkWriter::merge_doclen_changes( )
 			count++;
 			if ( count == MAX_ENTRIES_IN_CHUNK )
 			{
-				doc_len_list.push_back( map<Xapian::docid,Xapian::doclen>(start_pos,end_pos) );
+				doc_len_list.push_back( map<Xapian::docid,Xapian::termcount>(start_pos,end_pos) );
 				count = 0;
 				start_pos = end_pos;
 			}
 		}
 		if ( start_pos != end_pos )
 		{
-			doc_len_list.push_back( map<Xapian::docid,Xapian::doclen>(start_pos,end_pos) );
+			doc_len_list.push_back( map<Xapian::docid,Xapian::termcount>(start_pos,end_pos) );
 		}
 
 		for ( int i=0 ; i<(int)doc_len_list.size() ; ++i )
 		{
 			string cur_chunk, cur_key;
-			map<Xapian::docid,Xapian::doclen>::iterator it = doc_len_list[i].end();
+			map<Xapian::docid,Xapian::termcount>::iterator it = doc_len_list[i].end();
 			it--;
 			if ( i==(int)doc_len_list.size()-1 && is_last_chunk )
 			{
@@ -540,11 +538,11 @@ bool DoclenChunkWriter::merge_doclen_changes( )
 				string head_of_first_chunk =
 					make_start_of_first_chunk( 0, 0, doc_len_list[i].begin()->first );
 				cur_chunk = head_of_first_chunk+cur_chunk;
-				cur_key = make_key( string() );
+				cur_key = postlist_table->make_key( string() );
 			}
 			else
 			{
-				cur_key = make_key( string(), doc_len_list[i].begin()->first );
+				cur_key = postlist_table->make_key( string(), doc_len_list[i].begin()->first );
 			}
 
 			postlist_table->add(cur_key,cur_chunk);
@@ -1617,8 +1615,8 @@ BrassPostListTable::merge_doclen_changes(const map<Xapian::docid, Xapian::termco
 			++it;
 		}
 
-		cursor->del();
-		DoclenChunkWriter writer(desired_chunk
+		del(key);
+		DoclenChunkWriter writer(desired_chunk,
 			map<Xapian::docid,Xapian::termcount>(pre_it,it),
 			this, is_first_chunk);
 		writer.merge_doclen_changes();

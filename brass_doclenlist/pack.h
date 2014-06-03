@@ -449,7 +449,7 @@ pack_brass_postlist_key(const std::string &term, Xapian::docid did)
 
 template<class U>
 inline 
-	bool pack_uint_in_bytes( U n, int n_bytes, string& chunk )
+	bool pack_uint_in_bytes( U n, int n_bytes, std::string& chunk )
 {
 	while ( n_bytes-- )
 	{
