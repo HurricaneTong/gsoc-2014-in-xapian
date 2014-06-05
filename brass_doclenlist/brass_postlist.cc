@@ -370,21 +370,22 @@ Xapian::termcount FixedWidthChunkReader::getDoclen( Xapian::docid desired_did )
 
 bool DoclenChunkWriter::get_new_doclen( const map<Xapian::docid,Xapian::termcount>*& p_new_doclen )
 {
-	if ( chunk_from.empty() )
+
+	const char* pos = chunk_from.data();
+	const char* end = pos+chunk_from.size();
+
+	if ( is_first_chunk )
+	{
+		read_start_of_first_chunk( &pos, end, NULL, NULL );
+	}
+	read_start_of_chunk( &pos, end, 0, &is_last_chunk ); 
+
+	if ( pos == end )
 	{
 		p_new_doclen = &changes;
 	}
 	else
 	{
-		const char* pos = chunk_from.data();
-		const char* end = pos+chunk_from.size();
-
-		if ( is_first_chunk )
-		{
-			read_start_of_first_chunk( &pos, end, NULL, NULL );
-		}
-		read_start_of_chunk( &pos, end, 0, &is_last_chunk ); 
-
 		Xapian::docid bias = 0, cur_did = 0, inc_did = 0;
 		Xapian::termcount doc_len = 0;
 		unpack_uint( &pos, end, &bias );
@@ -1609,6 +1610,11 @@ BrassPostListTable::merge_doclen_changes(const map<Xapian::docid, Xapian::termco
 		bool is_last_chunk;
 		Xapian::docid last_did_in_chunk;
 		last_did_in_chunk = read_start_of_chunk(&pos, end, first_did_in_chunk, &is_last_chunk);
+
+		if ( last_did_in_chunk == 0 )
+		{
+			last_did_in_chunk = (Xapian::docid)-1;
+		}
 
 		while ( it!=doclens.end() && it->first<=last_did_in_chunk )
 		{
