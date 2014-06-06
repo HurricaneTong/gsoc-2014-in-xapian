@@ -490,10 +490,16 @@ bool DoclenChunkWriter::merge_doclen_changes( )
 				make_start_of_first_chunk( 0, 0, start_pos->first );
 			cur_chunk = head_of_first_chunk+cur_chunk;
 		}
-
-		string cur_key = BrassPostListTable::make_key( string(), start_pos->first );
+		string cur_key;
+		if ( !is_first_chunk )
+		{
+			cur_key = BrassPostListTable::make_key( string(), start_pos->first );
+		}
+		else
+		{
+			cur_key = BrassPostListTable::make_key( string() );
+		}
 		postlist_table->add(cur_key,cur_chunk);
-		//b_tree->insert( make_pair(cur_key,cur_chunk) ); 
 	}
 	else
 	{
@@ -1110,11 +1116,11 @@ BrassPostList::init()
 
     did = read_start_of_first_chunk(&pos, end, &number_of_entries, NULL);
     first_did_in_chunk = did;
-    last_did_in_chunk = read_start_of_chunk(&pos, end, first_did_in_chunk,
-					    &is_last_chunk);
+    last_did_in_chunk = read_start_of_chunk(&pos, end, first_did_in_chunk, &is_last_chunk);
 	if(!is_doclen_list)
 	{
 		read_wdf(&pos, end, &wdf);
+		p_doclen_chunk_reader = NULL;
 	}
 	if ( is_doclen_list )
 	{
@@ -1129,7 +1135,7 @@ BrassPostList::init()
 BrassPostList::~BrassPostList()
 {
     LOGCALL_DTOR(DB, "BrassPostList");
-	if ( p_doclen_chunk_reader )
+	if ( is_doclen_list && p_doclen_chunk_reader )
 	{
 		delete p_doclen_chunk_reader;
 		p_doclen_chunk_reader = NULL;
@@ -1325,8 +1331,7 @@ BrassPostList::move_to_chunk_containing(Xapian::docid desired_did)
     }
 
     first_did_in_chunk = did;
-    last_did_in_chunk = read_start_of_chunk(&pos, end, first_did_in_chunk,
-					    &is_last_chunk);
+    last_did_in_chunk = read_start_of_chunk(&pos, end, first_did_in_chunk, &is_last_chunk);
 	if ( !is_doclen_list )
 	{
 		read_wdf(&pos, end, &wdf);
@@ -1621,7 +1626,7 @@ BrassPostListTable::merge_doclen_changes(const map<Xapian::docid, Xapian::termco
 			++it;
 		}
 
-		del(key);
+		del(cursor->current_key);
 		DoclenChunkWriter writer(desired_chunk,
 			map<Xapian::docid,Xapian::termcount>(pre_it,it),
 			this, is_first_chunk);
