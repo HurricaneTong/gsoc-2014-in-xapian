@@ -92,7 +92,7 @@ class DoclenChunkWriter
 private:
 
 	const string& chunk_from;
-	const map<Xapian::docid,Xapian::termcount>& changes;
+	const map<Xapian::docid,Xapian::termcount> changes;
 	BrassPostListTable* postlist_table;
 	bool is_first_chunk;
 	bool is_last_chunk;
@@ -101,10 +101,11 @@ private:
 	bool get_new_doclen( const map<Xapian::docid,Xapian::termcount>*& p_new_doclen );
 public:
 	DoclenChunkWriter( const string& chunk_from_, 
-		const map<Xapian::docid,Xapian::termcount>& changes_, 
+		map<Xapian::docid,Xapian::termcount>::const_iterator& changes_start,
+		map<Xapian::docid,Xapian::termcount>::const_iterator& changes_end,
 		BrassPostListTable* postlist_table_,
 		bool is_first_chunk_ )
-		: chunk_from(chunk_from_), changes(changes_), postlist_table(postlist_table_), is_first_chunk(is_first_chunk_)
+		: chunk_from(chunk_from_), changes(changes_start,changes_end), postlist_table(postlist_table_), is_first_chunk(is_first_chunk_)
 	{
 		is_last_chunk = true;
 	}

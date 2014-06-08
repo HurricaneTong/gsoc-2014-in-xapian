@@ -1627,9 +1627,7 @@ BrassPostListTable::merge_doclen_changes(const map<Xapian::docid, Xapian::termco
 		}
 
 		del(cursor->current_key);
-		DoclenChunkWriter writer(desired_chunk,
-			map<Xapian::docid,Xapian::termcount>(pre_it,it),
-			this, is_first_chunk);
+		DoclenChunkWriter writer(desired_chunk, pre_it, it, this, is_first_chunk);
 		writer.merge_doclen_changes();
 		pre_it = it;
 	}
