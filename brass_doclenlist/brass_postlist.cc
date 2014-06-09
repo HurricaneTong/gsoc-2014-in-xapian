@@ -475,6 +475,14 @@ bool DoclenChunkWriter::merge_doclen_changes( )
 
 	map<Xapian::docid,Xapian::termcount>::const_iterator start_pos, end_pos;
 	start_pos = end_pos = p_new_doclen->begin();
+	if ( p_new_doclen->size() == 0 )
+	{
+		string cur_key = BrassPostListTable::make_key( string() );
+		string cur_chunk = make_start_of_first_chunk(0, 0, 0);
+		cur_chunk += make_start_of_chunk(true, 0, 0);
+		postlist_table->add(cur_key,cur_chunk);
+		return true;
+	}
 	if ( p_new_doclen->size() <= MAX_ENTRIES_IN_CHUNK )
 	{
 		string cur_chunk;
@@ -1621,10 +1629,19 @@ BrassPostListTable::merge_doclen_changes(const map<Xapian::docid, Xapian::termco
 			last_did_in_chunk = (Xapian::docid)-1;
 		}
 
-		while ( it!=doclens.end() && it->first<=last_did_in_chunk )
+		if ( it->first > last_did_in_chunk )
 		{
-			++it;
+			it++;
 		}
+		else
+		{
+			while ( it!=doclens.end() && it->first<=last_did_in_chunk )
+			{
+				++it;
+			}
+		}
+
+
 
 		del(cursor->current_key);
 		DoclenChunkWriter writer(desired_chunk, pre_it, it, this, is_first_chunk);
