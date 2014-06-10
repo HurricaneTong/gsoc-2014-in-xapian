@@ -69,22 +69,62 @@ public:
 class FixedWidthChunkReader
 {
 private:
-	const char* start_pos;
+
+	const char* ori_pos;
 	const char* pos;
+	const char* pos_of_block;
 	const char* end;
 	Xapian::docid cur_did;
-	Xapian::termcount doc_length;
+	Xapian::termcount cur_length;
+	bool is_at_end;
+	bool is_in_block;
+	unsigned len_info;
+	unsigned bytes_info;
+	Xapian::docid did_before_block;
+
+	const char* old_pos;
+	const char* old_pos_of_block;
+	Xapian::docid old_cur_did;
+	Xapian::termcount old_cur_length;
+	bool old_is_at_end;
+	bool old_is_in_block;
+	unsigned old_len_info;
+	unsigned old_bytes_info;
+	Xapian::docid old_did_before_block;
+
+	void store_state();
+	void restore_state();
 
 public:
 	FixedWidthChunkReader( const char* pos_, const char* end_ )
-		: start_pos(pos_), end(end_)
+		: ori_pos(pos_), pos(pos_), pos_of_block(NULL), end(end_), cur_did(0), cur_length(0),
+		is_at_end(false),is_in_block(false),len_info(0),bytes_info(0),did_before_block(0)
 	{
-		pos = start_pos;
-		cur_did = 0;
-		doc_length = -1;
+		if ( pos == end )
+		{
+			is_at_end = true;
+			return;
+		}
 		unpack_uint( &pos, end, &cur_did );
+		next();
 	};
 	Xapian::termcount getDoclen( Xapian::docid desired_did );
+
+	bool jump_to( Xapian::docid desired_did );
+	bool next();
+
+	Xapian::docid get_docid()
+	{
+		return cur_did;
+	}
+	Xapian::termcount get_doclength()
+	{
+		return cur_length;
+	}
+	bool at_end()
+	{
+		return is_at_end;
+	}
 };
 
 class DoclenChunkWriter
@@ -127,7 +167,26 @@ public:
 			p_fwcr = NULL;
 		}
 	}
-	Xapian::docid get_doclen( Xapian::docid desired_did );
+	Xapian::termcount get_doclen( Xapian::docid desired_did )
+	{
+		if( p_fwcr->jump_to(desired_did) )
+		{
+			return p_fwcr->get_doclength();
+		}
+		return -1;
+	}
+	Xapian::termcount get_doclen()
+	{
+		return p_fwcr->get_doclength();
+	}
+	Xapian::docid get_docid()
+	{
+		return p_fwcr->get_docid();
+	}
+	bool next()
+	{
+		return p_fwcr->next();
+	}
 };
 
 class BrassPostList;

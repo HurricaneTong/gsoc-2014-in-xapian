@@ -214,7 +214,19 @@ FixedWidthChunk::FixedWidthChunk( const map<Xapian::docid,Xapian::termcount>& po
 
 bool FixedWidthChunk::buildVector( const map<Xapian::docid,Xapian::termcount>& postlist )
 {
+	if ( postlist.empty() )
+	{
+		return false;
+	}
 	map<Xapian::docid,Xapian::termcount>::const_iterator it = postlist.begin(), start_pos;
+	while ( it->second == SEPERATOR )
+	{
+		++it;
+		if ( it==postlist.end() )
+		{
+			return false;
+		}
+	}
 	bias = it->first;
 	Xapian::docid docid_before_start_pos = it->first;
 
@@ -228,6 +240,15 @@ bool FixedWidthChunk::buildVector( const map<Xapian::docid,Xapian::termcount>& p
 
 		start_pos = it;
 		it++;
+
+		while ( it->second == SEPERATOR )
+		{
+			++it;
+			if ( it==postlist.end() )
+			{
+				break;
+			}
+		}
 
 		while ( it!=postlist.end() )
 		{
@@ -249,6 +270,14 @@ bool FixedWidthChunk::buildVector( const map<Xapian::docid,Xapian::termcount>& p
 			length_contiguous++;
 			last_docid = cur_docid;
 			it++;
+			while ( it->second == SEPERATOR )
+			{
+				++it;
+				if ( it==postlist.end() )
+				{
+					break;
+				}
+			}
 		}
 
 		if ( length_contiguous > DOCLEN_CHUNK_MIN_CONTIGUOUS_LENGTH )
@@ -263,6 +292,10 @@ bool FixedWidthChunk::buildVector( const map<Xapian::docid,Xapian::termcount>& p
 				src.push_back(start_pos->second);
 				docid_before_start_pos = start_pos->first;
 				start_pos++;
+				while ( start_pos->second == SEPERATOR )
+				{
+					++start_pos;
+				}
 			}
 		}
 		else
@@ -273,6 +306,10 @@ bool FixedWidthChunk::buildVector( const map<Xapian::docid,Xapian::termcount>& p
 				src.push_back(start_pos->second);
 				docid_before_start_pos = start_pos->first;
 				start_pos++;
+				while ( start_pos->second == SEPERATOR )
+				{
+					++start_pos;
+				}
 			}
 		}
 
@@ -311,60 +348,165 @@ bool FixedWidthChunk::encode( string& chunk ) const
 	return true;
 }
 
-Xapian::termcount FixedWidthChunkReader::getDoclen( Xapian::docid desired_did )
+bool FixedWidthChunkReader::next()
 {
-	if ( cur_did==desired_did && doc_length!=(unsigned)-1 )
+	if ( is_at_end )
 	{
-		return doc_length;
+		return false;
 	}
-	if ( cur_did > desired_did )
+	if ( pos == end )
 	{
-		pos = start_pos;
+		return false;
+	}
+	if ( is_in_block && len_info )
+	{
+		cur_did++;
+		len_info--;
+		if ( len_info == 0 )
+		{
+			is_in_block = false;
+		}
+		unpack_uint_in_bytes( &pos, bytes_info, &cur_length );
+		is_at_end = pos==end;
+		return true;
+	}
+	Xapian::docid incre_did = 0;
+
+	pos_of_block = pos;
+
+	unpack_uint( &pos, end, &incre_did );
+	if ( incre_did != SEPERATOR )
+	{
+		is_in_block = false;
+		cur_did += incre_did;
+		unpack_uint( &pos, end, &cur_length );
+		is_at_end = pos==end;
+		return true;
+	}
+
+	is_in_block = true;
+	unpack_uint( &pos, end, &incre_did );
+	unpack_uint_in_bytes( &pos, 2, &len_info );
+	unpack_uint_in_bytes( &pos, 1, &bytes_info );
+	did_before_block = cur_did;
+	cur_did += incre_did;
+	unpack_uint_in_bytes( &pos, bytes_info, &cur_length );
+	len_info--;
+	if ( len_info == 0 )
+	{
+		is_in_block = false;
+	}
+	is_at_end = pos==end;
+	return true;
+}
+
+void FixedWidthChunkReader::store_state()
+{
+	old_pos = pos;
+	old_pos_of_block = pos_of_block;
+	old_cur_did = cur_did;
+	old_cur_length = cur_length;
+	old_is_at_end = is_at_end;
+	old_is_in_block = is_in_block;
+	old_len_info = len_info;
+	old_bytes_info = bytes_info;
+	old_did_before_block = did_before_block;
+}
+
+void FixedWidthChunkReader::restore_state()
+{
+	pos = old_pos;
+	pos_of_block = old_pos_of_block;
+	cur_did = old_cur_did;
+	cur_length = old_cur_length;
+	is_at_end = old_is_at_end;
+	is_in_block = old_is_in_block;
+	len_info = old_len_info;
+	bytes_info = old_bytes_info;
+	did_before_block = old_did_before_block;
+}
+
+bool FixedWidthChunkReader::jump_to( Xapian::docid desired_did )
+{
+
+	store_state();
+
+	if ( cur_did==desired_did )
+	{
+		return true;
+	}
+	if ( is_in_block )
+	{
+		if ( did_before_block >= desired_did )
+		{
+			pos = ori_pos;
+			cur_did = 0;
+			unpack_uint( &pos, end, &cur_did );
+		}
+		else
+		{
+			pos = pos_of_block;
+			cur_did = did_before_block;
+		}
+	}
+	else if ( cur_did > desired_did )
+	{
+		pos = ori_pos;
 		cur_did = 0;
 		unpack_uint( &pos, end, &cur_did );
 	}
 
-
 	Xapian::docid incre_did = 0;
-
 	while ( pos!=end )
 	{
-		const char* old_pos = pos;
+		pos_of_block = pos;
 		unpack_uint( &pos, end, &incre_did );
 		if ( incre_did != SEPERATOR )
 		{
+			is_in_block = false;
 			cur_did += incre_did;
-			unpack_uint( &pos, end, &doc_length );
+			unpack_uint( &pos, end, &cur_length );
 			if ( cur_did == desired_did )
 			{
-				return doc_length;
+				is_at_end = pos==end;
+				return true;
+			}
+			if ( cur_did > desired_did )
+			{
+				restore_state();
+				return false;
 			}
 			continue;
 		}
 		else
 		{
+			is_in_block = true;
 			unpack_uint( &pos, end, &incre_did );
-			unsigned len=0, bytes=0;
-			unpack_uint_in_bytes( &pos, 2, &len );
-			unpack_uint_in_bytes( &pos, 1, &bytes );
-			Xapian::docid old_cur_did = cur_did;
+			unpack_uint_in_bytes( &pos, 2, &len_info );
+			unpack_uint_in_bytes( &pos, 1, &bytes_info );
+			did_before_block = cur_did;
 			cur_did += incre_did;
-			if ( desired_did <= cur_did+len-1 )
+			if ( desired_did <= cur_did+len_info-1 )
 			{
-				pos += bytes*(desired_did-cur_did);
-				unpack_uint_in_bytes( &pos, bytes, &doc_length );			
-
-				pos = old_pos;
-				cur_did = old_cur_did;
-
-				return doc_length;
+				pos += bytes_info*(desired_did-cur_did);
+				unpack_uint_in_bytes( &pos, bytes_info, &cur_length );
+				len_info -= (desired_did-cur_did+1);
+				if ( len_info == 0 )
+				{
+					is_in_block = false;
+				}
+				cur_did = desired_did;
+				is_at_end = pos==end;
+				return true;
 			}
-			pos += bytes*len;
-			cur_did += len-1;
+			pos += bytes_info*len_info;
+			cur_did += len_info-1;
+			is_in_block = false;
 		}
 
 	}
-	return -1;
+	restore_state();
+	return false;
 }
 
 
@@ -579,11 +721,6 @@ DoclenChunkReader::DoclenChunkReader( const string& chunk_, bool is_first_chunk 
 	bool is_last_chunk;
 	read_start_of_chunk( &pos, end, 0, &is_last_chunk );
 	p_fwcr = new FixedWidthChunkReader(pos,end);
-}
-
-Xapian::docid DoclenChunkReader::get_doclen( Xapian::docid desired_did )
-{
-	return p_fwcr->getDoclen(desired_did);
 }
 
 Xapian::doccount
@@ -1132,9 +1269,9 @@ BrassPostList::init()
 	}
 	if ( is_doclen_list )
 	{
-		did = 0;
-		wdf = 0;
 		p_doclen_chunk_reader = new DoclenChunkReader(cursor->current_tag,true);
+		did = p_doclen_chunk_reader->get_docid();
+		wdf = p_doclen_chunk_reader->get_doclen();
 	}
     
     LOGLINE(DB, "Initial docid " << did);
@@ -1174,6 +1311,17 @@ bool
 BrassPostList::next_in_chunk()
 {
     LOGCALL(DB, bool, "BrassPostList::next_in_chunk", NO_ARGS);
+	if ( is_doclen_list )
+	{
+		Assert(p_doclen_chunk_reader);
+		if ( p_doclen_chunk_reader->next() )
+		{
+			did = p_doclen_chunk_reader->get_docid();
+			wdf = p_doclen_chunk_reader->get_doclen();
+			RETURN(true);
+		}
+		RETURN(false);
+	}
     if (pos == end) RETURN(false);
 
     read_did_increase(&pos, end, &did);
@@ -1238,13 +1386,13 @@ BrassPostList::next_chunk()
 	}
 	if ( is_doclen_list )
 	{
-		did = 0;
-		wdf = 0;
 		if( p_doclen_chunk_reader )
 		{
 			delete p_doclen_chunk_reader;
 		}
 		p_doclen_chunk_reader = new DoclenChunkReader(cursor->current_tag,is_first_chunk);
+		did = p_doclen_chunk_reader->get_docid();
+		wdf = p_doclen_chunk_reader->get_doclen();
 	}
     
 }
@@ -1346,13 +1494,13 @@ BrassPostList::move_to_chunk_containing(Xapian::docid desired_did)
 	}
 	if ( is_doclen_list )
 	{
-		did = 0;
-		wdf = 0;
 		if ( p_doclen_chunk_reader )
 		{
 			delete p_doclen_chunk_reader;
 		}
 		p_doclen_chunk_reader = new DoclenChunkReader(cursor->current_tag,is_first_chunk);
+		did = p_doclen_chunk_reader->get_docid();
+		wdf = p_doclen_chunk_reader->get_doclen();
 	}
     
 
@@ -1392,6 +1540,11 @@ BrassPostList::skip_to(Xapian::docid desired_did, double w_min)
 {
     LOGCALL(DB, PostList *, "BrassPostList::skip_to", desired_did | w_min);
     (void)w_min; // no warning
+	if ( is_doclen_list )
+	{
+		jump_to(desired_did);
+		RETURN(NULL);
+	}
     // We've started now - if we hadn't already, we're already positioned
     // at start so there's no need to actually do anything.
     have_started = true;
