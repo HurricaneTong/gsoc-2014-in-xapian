@@ -108,7 +108,6 @@ public:
 		unpack_uint( &pos, end, &cur_did );
 		next();
 	};
-	Xapian::termcount getDoclen( Xapian::docid desired_did );
 
 	bool jump_to( Xapian::docid desired_did );
 	bool next();
@@ -138,7 +137,7 @@ private:
 	bool is_last_chunk;
 	map<Xapian::docid,Xapian::termcount> new_doclen;
 
-	bool get_new_doclen( const map<Xapian::docid,Xapian::termcount>*& p_new_doclen );
+	bool get_new_doclen( );
 public:
 	DoclenChunkWriter( const string& chunk_from_, 
 		map<Xapian::docid,Xapian::termcount>::const_iterator& changes_start,
@@ -186,6 +185,10 @@ public:
 	bool next()
 	{
 		return p_fwcr->next();
+	}
+	bool at_end()
+	{
+		return p_fwcr->at_end();
 	}
 };
 
