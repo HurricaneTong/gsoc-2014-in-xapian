@@ -81,6 +81,7 @@ private:
 	unsigned len_info;
 	unsigned bytes_info;
 	Xapian::docid did_before_block;
+	Xapian::docid first_did_in_chunk;
 
 	const char* old_pos;
 	const char* old_pos_of_block;
@@ -96,9 +97,10 @@ private:
 	void restore_state();
 
 public:
-	FixedWidthChunkReader( const char* pos_, const char* end_ )
+	FixedWidthChunkReader( const char* pos_, const char* end_, Xapian::docid first_did_in_chunk_ )
 		: ori_pos(pos_), pos(pos_), pos_of_block(NULL), end(end_), cur_did(0), cur_length(0),
-		is_at_end(false),is_in_block(false),len_info(0),bytes_info(0),did_before_block(0)
+		is_at_end(false),is_in_block(false),len_info(0),bytes_info(0),
+		did_before_block(0),first_did_in_chunk(first_did_in_chunk_)
 	{
 		if ( pos == end )
 		{
@@ -106,6 +108,7 @@ public:
 			return;
 		}
 		unpack_uint( &pos, end, &cur_did );
+		cur_did = first_did_in_chunk_;
 		next();
 	};
 
@@ -135,6 +138,7 @@ private:
 	BrassPostListTable* postlist_table;
 	bool is_first_chunk;
 	bool is_last_chunk;
+	Xapian::docid first_did_in_chunk;
 	map<Xapian::docid,Xapian::termcount> new_doclen;
 
 	bool get_new_doclen( );
@@ -143,8 +147,10 @@ public:
 		map<Xapian::docid,Xapian::termcount>::const_iterator& changes_start,
 		map<Xapian::docid,Xapian::termcount>::const_iterator& changes_end,
 		BrassPostListTable* postlist_table_,
-		bool is_first_chunk_ )
-		: chunk_from(chunk_from_), changes(changes_start,changes_end), postlist_table(postlist_table_), is_first_chunk(is_first_chunk_)
+		bool is_first_chunk_, Xapian::docid first_did_in_chunk_ )
+		: chunk_from(chunk_from_), changes(changes_start,changes_end), 
+		postlist_table(postlist_table_), is_first_chunk(is_first_chunk_),
+		first_did_in_chunk(first_did_in_chunk_)
 	{
 		is_last_chunk = true;
 	}
@@ -157,7 +163,7 @@ private:
 	const string& chunk;
 	FixedWidthChunkReader* p_fwcr;
 public:
-	DoclenChunkReader( const string& chunk_, bool is_first_chunk );
+	DoclenChunkReader( const string& chunk_, bool is_first_chunk, Xapian::docid first_did_in_chunk );
 	~DoclenChunkReader()
 	{
 		if ( p_fwcr!= NULL )

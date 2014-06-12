@@ -451,6 +451,7 @@ bool FixedWidthChunkReader::jump_to( Xapian::docid desired_did )
 			pos = ori_pos;
 			cur_did = 0;
 			unpack_uint( &pos, end, &cur_did );
+			cur_did = first_did_in_chunk;
 		}
 		else
 		{
@@ -463,6 +464,7 @@ bool FixedWidthChunkReader::jump_to( Xapian::docid desired_did )
 		pos = ori_pos;
 		cur_did = 0;
 		unpack_uint( &pos, end, &cur_did );
+		cur_did = first_did_in_chunk;
 	}
 
 	Xapian::docid incre_did = 0;
@@ -562,6 +564,7 @@ bool DoclenChunkWriter::get_new_doclen( )
 		Xapian::termcount doc_len = 0;
 		unpack_uint( &pos, end, &bias );
 		cur_did = bias;
+		cur_did = first_did_in_chunk;
 		while ( pos!=end )
 		{
 			unpack_uint( &pos, end, &inc_did );
@@ -739,7 +742,8 @@ bool DoclenChunkWriter::merge_doclen_changes( )
 	return true;
 }
 
-DoclenChunkReader::DoclenChunkReader( const string& chunk_, bool is_first_chunk )
+DoclenChunkReader::DoclenChunkReader( const string& chunk_, bool is_first_chunk, 
+									 Xapian::docid first_did_in_chunk )
 	: chunk(chunk_)
 {
 	const char* pos = chunk.data();
@@ -750,7 +754,7 @@ DoclenChunkReader::DoclenChunkReader( const string& chunk_, bool is_first_chunk 
 	}
 	bool is_last_chunk;
 	read_start_of_chunk( &pos, end, 0, &is_last_chunk );
-	p_fwcr = new FixedWidthChunkReader(pos,end);
+	p_fwcr = new FixedWidthChunkReader(pos,end,first_did_in_chunk);
 }
 
 Xapian::doccount
@@ -1299,7 +1303,7 @@ BrassPostList::init()
 	}
 	if ( is_doclen_list )
 	{
-		p_doclen_chunk_reader = new DoclenChunkReader(cursor->current_tag,true);
+		p_doclen_chunk_reader = new DoclenChunkReader(cursor->current_tag,true,first_did_in_chunk);
 		did = p_doclen_chunk_reader->get_docid();
 		wdf = p_doclen_chunk_reader->get_doclen();
 	}
@@ -1422,7 +1426,7 @@ BrassPostList::next_chunk()
 		{
 			delete p_doclen_chunk_reader;
 		}
-		p_doclen_chunk_reader = new DoclenChunkReader(cursor->current_tag,is_first_chunk);
+		p_doclen_chunk_reader = new DoclenChunkReader(cursor->current_tag,is_first_chunk,first_did_in_chunk);
 		did = p_doclen_chunk_reader->get_docid();
 		wdf = p_doclen_chunk_reader->get_doclen();
 		is_at_end = p_doclen_chunk_reader->at_end();
@@ -1531,7 +1535,7 @@ BrassPostList::move_to_chunk_containing(Xapian::docid desired_did)
 		{
 			delete p_doclen_chunk_reader;
 		}
-		p_doclen_chunk_reader = new DoclenChunkReader(cursor->current_tag,is_first_chunk);
+		p_doclen_chunk_reader = new DoclenChunkReader(cursor->current_tag,is_first_chunk,first_did_in_chunk);
 		did = p_doclen_chunk_reader->get_docid();
 		wdf = p_doclen_chunk_reader->get_doclen();
 	}
@@ -1794,6 +1798,7 @@ BrassPostListTable::merge_doclen_changes(const map<Xapian::docid, Xapian::termco
 		LOGVALUE(DB, is_first_chunk);
 
 		cursor->read_tag();
+		string ori_key(cursor->current_key);
 		string desired_chunk(cursor->current_tag);
 
 		const char * pos = cursor->current_tag.data();
@@ -1808,30 +1813,30 @@ BrassPostListTable::merge_doclen_changes(const map<Xapian::docid, Xapian::termco
 		}
 
 		bool is_last_chunk;
-		Xapian::docid last_did_in_chunk;
-		last_did_in_chunk = read_start_of_chunk(&pos, end, first_did_in_chunk, &is_last_chunk);
+		read_start_of_chunk(&pos, end, first_did_in_chunk, &is_last_chunk);
 
-		if ( last_did_in_chunk == 0 )
+		Xapian::docid first_did_in_next_chunk = 0;
+		if ( is_last_chunk )
 		{
-			last_did_in_chunk = (Xapian::docid)-1;
-		}
-
-		if ( it->first > last_did_in_chunk )
-		{
-			it++;
+			it = doclens.end();
 		}
 		else
 		{
-			while ( it!=doclens.end() && it->first<=last_did_in_chunk )
-			{
-				++it;
-			}
+			cursor->next();
+			Assert(!cursor->after_end());
+			const char * kpos = cursor->current_key.data();
+			const char * kend = kpos + cursor->current_key.size();
+			Assert(check_tname_in_key(&kpos, kend, string()));
+			unpack_uint_preserving_sort(&kpos, kend, &first_did_in_next_chunk);
+			Assert(first_did_in_next_chunk);
+		}
+		while( it!=doclens.end() && it->first < first_did_in_next_chunk )
+		{
+			++it;
 		}
 
-
-
-		del(cursor->current_key);
-		DoclenChunkWriter writer(desired_chunk, pre_it, it, this, is_first_chunk);
+		del(ori_key);
+		DoclenChunkWriter writer(desired_chunk, pre_it, it, this, is_first_chunk,first_did_in_chunk);
 		writer.merge_doclen_changes();
 		pre_it = it;
 	}
