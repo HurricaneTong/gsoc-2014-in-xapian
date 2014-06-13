@@ -1306,6 +1306,7 @@ BrassPostList::init()
 		p_doclen_chunk_reader = new DoclenChunkReader(cursor->current_tag,true,first_did_in_chunk);
 		did = p_doclen_chunk_reader->get_docid();
 		wdf = p_doclen_chunk_reader->get_doclen();
+		is_at_end = p_doclen_chunk_reader->at_end();
 	}
     
     LOGLINE(DB, "Initial docid " << did);
@@ -1538,6 +1539,7 @@ BrassPostList::move_to_chunk_containing(Xapian::docid desired_did)
 		p_doclen_chunk_reader = new DoclenChunkReader(cursor->current_tag,is_first_chunk,first_did_in_chunk);
 		did = p_doclen_chunk_reader->get_docid();
 		wdf = p_doclen_chunk_reader->get_doclen();
+		is_at_end = p_doclen_chunk_reader->at_end();
 	}
     
 
