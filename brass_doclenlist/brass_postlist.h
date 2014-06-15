@@ -33,6 +33,8 @@
 #include "api/leafpostlist.h"
 #include "omassert.h"
 
+#include "debuglog.h"
+
 #include "autoptr.h"
 #include <map>
 #include <string>
@@ -102,14 +104,19 @@ public:
 		is_at_end(false),is_in_block(false),len_info(0),bytes_info(0),
 		did_before_block(0),first_did_in_chunk(first_did_in_chunk_)
 	{
+		LOGCALL_CTOR(DB, "FixedWidthChunkReader", first_did_in_chunk_ );
 		if ( pos == end )
 		{
 			is_at_end = true;
+			LOGLINE(DB, "empty chunk" ); 
 			return;
 		}
 		unpack_uint( &pos, end, &cur_did );
 		cur_did = first_did_in_chunk_;
 		next();
+		LOGVALUE(DB, is_at_end );
+		LOGVALUE(DB, cur_did );
+		LOGVALUE(DB, cur_length );
 	};
 
 	bool jump_to( Xapian::docid desired_did );
@@ -152,6 +159,7 @@ public:
 		postlist_table(postlist_table_), is_first_chunk(is_first_chunk_),
 		first_did_in_chunk(first_did_in_chunk_)
 	{
+		LOGCALL_CTOR(DB, "DoclenChunkWriter", is_first_chunk_ | first_did_in_chunk_ );
 		is_last_chunk = true;
 	}
 	bool merge_doclen_changes( );
@@ -166,6 +174,8 @@ public:
 	DoclenChunkReader( const string& chunk_, bool is_first_chunk, Xapian::docid first_did_in_chunk );
 	~DoclenChunkReader()
 	{
+		LOGCALL_DTOR(DB, "DoclenChunkReader");
+		Assert(p_fwcr);
 		if ( p_fwcr!= NULL )
 		{
 			delete p_fwcr;
