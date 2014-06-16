@@ -61,7 +61,6 @@ class FixedWidthChunk
 {
 private:
 	vector<unsigned> src;
-	unsigned bias;
 	bool buildVector( const map<Xapian::docid,Xapian::termcount>& postlist );
 public:
 	FixedWidthChunk( const map<Xapian::docid,Xapian::termcount>& postlist );
@@ -85,18 +84,6 @@ private:
 	Xapian::docid did_before_block;
 	Xapian::docid first_did_in_chunk;
 
-	const char* old_pos;
-	const char* old_pos_of_block;
-	Xapian::docid old_cur_did;
-	Xapian::termcount old_cur_length;
-	bool old_is_at_end;
-	bool old_is_in_block;
-	unsigned old_len_info;
-	unsigned old_bytes_info;
-	Xapian::docid old_did_before_block;
-
-	void store_state();
-	void restore_state();
 
 public:
 	FixedWidthChunkReader( const char* pos_, const char* end_, Xapian::docid first_did_in_chunk_ )
@@ -111,7 +98,6 @@ public:
 			LOGLINE(DB, "empty chunk" ); 
 			return;
 		}
-		unpack_uint( &pos, end, &cur_did );
 		cur_did = first_did_in_chunk_;
 		next();
 		LOGVALUE(DB, is_at_end );
@@ -169,18 +155,12 @@ class DoclenChunkReader
 {
 private:
 	const string& chunk;
-	FixedWidthChunkReader* p_fwcr;
+	AutoPtr<FixedWidthChunkReader> p_fwcr;
 public:
 	DoclenChunkReader( const string& chunk_, bool is_first_chunk, Xapian::docid first_did_in_chunk );
 	~DoclenChunkReader()
 	{
 		LOGCALL_DTOR(DB, "DoclenChunkReader");
-		Assert(p_fwcr);
-		if ( p_fwcr!= NULL )
-		{
-			delete p_fwcr;
-			p_fwcr = NULL;
-		}
 	}
 	Xapian::termcount get_doclen( Xapian::docid desired_did )
 	{
@@ -328,7 +308,8 @@ class BrassPostList : public LeafPostList {
 	/// The number of entries in the posting list.
 	Xapian::doccount number_of_entries;
 
-	DoclenChunkReader* p_doclen_chunk_reader;
+	AutoPtr<DoclenChunkReader> p_doclen_chunk_reader;
+	//DoclenChunkReader* p_doclen_chunk_reader;
 	bool is_doclen_list;
 	bool is_first_chunk;
 

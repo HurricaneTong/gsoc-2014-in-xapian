@@ -230,7 +230,6 @@ bool FixedWidthChunk::buildVector( const map<Xapian::docid,Xapian::termcount>& p
 			return false;
 		}
 	}*/
-	bias = it->first;
 	Xapian::docid docid_before_start_pos = it->first;
 
 	while ( it!=postlist.end() )
@@ -331,8 +330,9 @@ bool FixedWidthChunk::buildVector( const map<Xapian::docid,Xapian::termcount>& p
 bool FixedWidthChunk::encode( string& chunk ) const
 {
 	LOGCALL(DB, bool, "FixedWidthChunk::encode", chunk.size() );
+	
 	int i=0;
-	pack_uint( chunk, bias );
+	
 	while ( i<(int)src.size() )
 	{
 		if ( src[i] != SEPERATOR )
@@ -411,32 +411,6 @@ bool FixedWidthChunkReader::next()
 	RETURN(true);
 }
 
-void FixedWidthChunkReader::store_state()
-{
-	old_pos = pos;
-	old_pos_of_block = pos_of_block;
-	old_cur_did = cur_did;
-	old_cur_length = cur_length;
-	old_is_at_end = is_at_end;
-	old_is_in_block = is_in_block;
-	old_len_info = len_info;
-	old_bytes_info = bytes_info;
-	old_did_before_block = did_before_block;
-}
-
-void FixedWidthChunkReader::restore_state()
-{
-	pos = old_pos;
-	pos_of_block = old_pos_of_block;
-	cur_did = old_cur_did;
-	cur_length = old_cur_length;
-	is_at_end = old_is_at_end;
-	is_in_block = old_is_in_block;
-	len_info = old_len_info;
-	bytes_info = old_bytes_info;
-	did_before_block = old_did_before_block;
-}
-
 bool FixedWidthChunkReader::jump_to( Xapian::docid desired_did )
 {
 
@@ -451,8 +425,6 @@ bool FixedWidthChunkReader::jump_to( Xapian::docid desired_did )
 		if ( did_before_block >= desired_did )
 		{
 			pos = ori_pos;
-			cur_did = 0;
-			unpack_uint( &pos, end, &cur_did );
 			cur_did = first_did_in_chunk;
 		}
 		else
@@ -464,8 +436,6 @@ bool FixedWidthChunkReader::jump_to( Xapian::docid desired_did )
 	else if ( cur_did > desired_did )
 	{
 		pos = ori_pos;
-		cur_did = 0;
-		unpack_uint( &pos, end, &cur_did );
 		cur_did = first_did_in_chunk;
 	}
 
@@ -557,10 +527,8 @@ bool DoclenChunkWriter::get_new_doclen( )
 	}
 	else
 	{
-		Xapian::docid bias = 0, cur_did = 0, inc_did = 0;
+		Xapian::docid cur_did = 0, inc_did = 0;
 		Xapian::termcount doc_len = 0;
-		unpack_uint( &pos, end, &bias );
-		cur_did = bias;
 		cur_did = first_did_in_chunk;
 		while ( pos!=end )
 		{
@@ -743,7 +711,7 @@ bool DoclenChunkWriter::merge_doclen_changes( )
 
 DoclenChunkReader::DoclenChunkReader( const string& chunk_, bool is_first_chunk, 
 									 Xapian::docid first_did_in_chunk )
-	: chunk(chunk_)
+	: chunk(chunk_), p_fwcr(0)
 {
 	LOGCALL_CTOR(DB, "DoclenChunkReader", chunk_.size() | is_first_chunk | first_did_in_chunk );
 	const char* pos = chunk.data();
@@ -755,7 +723,7 @@ DoclenChunkReader::DoclenChunkReader( const string& chunk_, bool is_first_chunk,
 	bool is_last_chunk;
 	read_start_of_chunk( &pos, end, 0, &is_last_chunk );
 	LOGVALUE(DB,is_last_chunk);
-	p_fwcr = new FixedWidthChunkReader(pos,end,first_did_in_chunk);
+	p_fwcr.reset( new FixedWidthChunkReader(pos,end,first_did_in_chunk) );
 }
 
 Xapian::doccount
@@ -1253,6 +1221,7 @@ BrassPostList::BrassPostList(intrusive_ptr<const BrassDatabase> this_db_,
 	  have_started(false),
 	  is_at_end(false),
 	  cursor(this_db_->postlist_table.cursor_get()),
+	  p_doclen_chunk_reader(0),
 	  is_doclen_list(term_.empty()?true:false)
 {
     LOGCALL_CTOR(DB, "BrassPostList", this_db_.get() | term_ | keep_reference);
@@ -1268,6 +1237,7 @@ BrassPostList::BrassPostList(intrusive_ptr<const BrassDatabase> this_db_,
 	  have_started(false),
 	  is_at_end(false),
 	  cursor(cursor_),
+	  p_doclen_chunk_reader(0),
 	  is_doclen_list(term_.empty()?true:false)
 {
     LOGCALL_CTOR(DB, "BrassPostList", this_db_.get() | term_ | cursor_);
@@ -1302,12 +1272,12 @@ BrassPostList::init()
 	if(!is_doclen_list)
 	{
 		read_wdf(&pos, end, &wdf);
-		p_doclen_chunk_reader = NULL;
+		p_doclen_chunk_reader.reset(0);
 	}
 	if ( is_doclen_list )
 	{
 		LOGLINE( DB, "This brass_postlist is for doclen info." );
-		p_doclen_chunk_reader = new DoclenChunkReader(cursor->current_tag,true,first_did_in_chunk);
+		p_doclen_chunk_reader.reset( new DoclenChunkReader(cursor->current_tag,true,first_did_in_chunk) );
 		did = p_doclen_chunk_reader->get_docid();
 		wdf = p_doclen_chunk_reader->get_doclen();
 		is_at_end = p_doclen_chunk_reader->at_end();
@@ -1323,11 +1293,11 @@ BrassPostList::~BrassPostList()
 {
     LOGCALL_DTOR(DB, "BrassPostList");
 	LOGVALUE(DB, is_doclen_list );
-	if ( is_doclen_list && p_doclen_chunk_reader )
+	/*if ( is_doclen_list && p_doclen_chunk_reader )
 	{
 		delete p_doclen_chunk_reader;
 		p_doclen_chunk_reader = NULL;
-	}
+	}*/
 }
 
 LeafPostList *
@@ -1357,7 +1327,6 @@ BrassPostList::next_in_chunk()
 	if ( is_doclen_list )
 	{
 		LOGLINE(DB, "next_in_chunk() for doclen list " );
-		Assert(p_doclen_chunk_reader);
 		if ( p_doclen_chunk_reader->next() )
 		{
 			did = p_doclen_chunk_reader->get_docid();
@@ -1436,13 +1405,13 @@ BrassPostList::next_chunk()
 	if ( is_doclen_list )
 	{
 		LOGLINE(DB, "next_chunk() for doclen list" );
-		if( p_doclen_chunk_reader )
+		/*if( p_doclen_chunk_reader )
 		{
 			LOGLINE(DB, "delete current doclen_chunk_reader " ); 
 			delete p_doclen_chunk_reader;
-		}
+		}*/
 		LOGLINE(DB, "build new doclen_chunk_reader " ); 
-		p_doclen_chunk_reader = new DoclenChunkReader(cursor->current_tag,is_first_chunk,first_did_in_chunk);
+		p_doclen_chunk_reader.reset( new DoclenChunkReader(cursor->current_tag,is_first_chunk,first_did_in_chunk) );
 		did = p_doclen_chunk_reader->get_docid();
 		wdf = p_doclen_chunk_reader->get_doclen();
 		is_at_end = p_doclen_chunk_reader->at_end();
@@ -1550,13 +1519,13 @@ BrassPostList::move_to_chunk_containing(Xapian::docid desired_did)
 	}
 	if ( is_doclen_list )
 	{
-		if ( p_doclen_chunk_reader )
+		/*if ( p_doclen_chunk_reader )
 		{
 			LOGLINE(DB, "delete current doclen_chunk_reader " ); 			
 			delete p_doclen_chunk_reader;
-		}
+		}*/
 		LOGLINE(DB, "build new doclen_chunk_reader " ); 
-		p_doclen_chunk_reader = new DoclenChunkReader(cursor->current_tag,is_first_chunk,first_did_in_chunk);
+		p_doclen_chunk_reader.reset( new DoclenChunkReader(cursor->current_tag,is_first_chunk,first_did_in_chunk) );
 		did = p_doclen_chunk_reader->get_docid();
 		wdf = p_doclen_chunk_reader->get_doclen();
 		is_at_end = p_doclen_chunk_reader->at_end();
