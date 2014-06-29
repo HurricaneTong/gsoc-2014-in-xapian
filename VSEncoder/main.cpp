@@ -10,14 +10,6 @@
 
 using namespace std;
 
-
-inline void EnableMemLeakCheck()
-{
-	_CrtSetDbgFlag(_CrtSetDbgFlag(_CRTDBG_REPORT_FLAG) | _CRTDBG_LEAK_CHECK_DF);
-}
-
-
-
 void testVSEncoding()
 {
 	int maxi = 0xffff;
@@ -41,13 +33,13 @@ void genRand()
 {
 	ofstream out( "randNum.txt" );
 	srand(time(NULL));
-	for ( int i = 1 ; i < 0xfffffff ; i = i+rand()%10+10 )
+	for ( int i = 1 ; i < 0xffffff ; i = i+rand()%50+50 )
 	{
-		out << i+rand()%10 << endl;
-		//if ( i%50 == 0 )
-		//{
-		//	i *= 1.5;
-		//}
+		out << i+rand()%50 << endl;
+		if ( i%50 == 0 )
+		{
+			i *= 1.5;
+		}
 	}
 	out << -1 << endl;
 	out.close();
@@ -61,10 +53,6 @@ void readRand( vector<unsigned int>& src )
 	while ( tmp != -1 )
 	{
 		src.push_back( tmp );
-		if ( src.size() == 10000 )
-		{
-			return;
-		}
 		in >> tmp;
 	}
 	in.close();
@@ -75,9 +63,13 @@ void readBigData( vector<unsigned int>& src )
 	ifstream in( "Z:\\linux.postlist" );
 	int tmp = 0;
 	in >> tmp;
-	while ( tmp != -1 )
+	while ( !in.eof() )
 	{
 		src.push_back( tmp );
+		//if ( src.size() == 1000 )
+		//{
+		//	return;
+		//}
 		in >> tmp;
 	}
 	in.close();
@@ -89,11 +81,12 @@ double CalTimeVS( const vector<unsigned int>& src )
 	double costT = 0, startT = 0, endT = 0;
 	cout << "finish reading" << endl;
 	string buf;
-	VSEncoder vse(buf);
+	VSEncoder vse(buf,16);
 	startT = clock();
 	vse.encode( src );
 	endT = clock();
 	cout << "VSEncoding: " << endT-startT << endl;
+	cout << src.size() << endl;
 	cout << "finish encoding" << endl;
 	VSDecoder vsd(buf);
 	startT = clock();
@@ -196,6 +189,7 @@ double CalTimeInterpolative( const vector<unsigned int>& vec)
 	}
 	endT = clock();
 	cout << "Interpolative Encoding: " << endT-startT << endl;
+	cout << s.size() << endl;
 	cout << "finish encoding" << endl;
 	BitReader rd;
 	startT = clock();
@@ -218,47 +212,11 @@ double CalTimeInterpolative( const vector<unsigned int>& vec)
 	return costT;
 }
 
-
-/*void testMem()
-{
-	string buf;
-
-
-	VSEncoder vse( buf );
-
-	//unsigned int src[1] = {484};
-	//vector<unsigned int> L( src, src+1 );
-
-	//unsigned int src[] = {8,1,1,8,1,1};
-	//vector<unsigned int> L( src, src+6 );
-
-
-	unsigned int src[] = { 1, 3, 13, 14, 35, 58, 98, 127, 345, 1009, 15000, 0xffffff };
-	vector<unsigned int> L( src, src+12 );
-
-	vse.encode( L );
-	//vector<unsigned int> R;
-	VSDecoder vsd( buf );
-	//vsd.decode( R );
-	unsigned int i = vsd.next();
-	while ( i != ~0 )
-	{
-		cout << i << endl;
-		i = vsd.next();
-	}
-	cout << vsd.get_n_entry() << endl;
-	cout << vsd.get_last_entry() << endl;
-}*/
-
 int main()
 {
-
-	//EnableMemLeakCheck();
-	//_CrtDumpMemoryLeaks();
-	//genRand();
 	vector<unsigned int> src;
-	readBigData( src );
-	//readRand(src);
+	//readBigData( src );
+	readRand(src);
 	cout << CalTimeVS( src ) << endl;
 	cout << CalTimeInterpolative( src ) << endl;
 	return 0;

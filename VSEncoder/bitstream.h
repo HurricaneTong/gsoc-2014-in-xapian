@@ -21,7 +21,7 @@ protected:
 	unsigned char& acc;
 	int& bits;
 
-	bool check_acc();
+	inline bool check_acc();
 
 public:
 	Encoder( std::string& buf_, unsigned char& acc_, int& bits_ )
@@ -64,7 +64,8 @@ public:
 class OrdinaryEncoder : public Encoder
 {
 private:
-	unsigned int num_of_bits;
+	const unsigned int num_of_bits;
+	static const unsigned int mask_low_n_bits[9];
 public:
 	OrdinaryEncoder( std::string& buf_, unsigned char& acc_, int& bits_, int num_of_bits_ )
 		: Encoder( buf_, acc_, bits_ ), num_of_bits( num_of_bits_ )
