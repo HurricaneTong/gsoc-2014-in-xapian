@@ -84,6 +84,7 @@ private:
 	int maxK;
 	int n_info;
 	unsigned int get_optimal_split( const std::vector<unsigned int>& L, std::vector<unsigned int>& S );
+	unsigned int get_optimal_split2( const std::vector<unsigned int>& L, std::vector<unsigned int>& S );
 	void encode( const std::vector<unsigned int>& L, int i, int j );
 
 public:

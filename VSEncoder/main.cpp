@@ -86,7 +86,7 @@ double CalTimeVS( const vector<unsigned int>& src )
 	vse.encode( src );
 	endT = clock();
 	cout << "VSEncoding: " << endT-startT << endl;
-	cout << src.size() << endl;
+	cout << buf.size() << endl;
 	cout << "finish encoding" << endl;
 	VSDecoder vsd(buf);
 	startT = clock();
@@ -215,8 +215,8 @@ double CalTimeInterpolative( const vector<unsigned int>& vec)
 int main()
 {
 	vector<unsigned int> src;
-	//readBigData( src );
-	readRand(src);
+	readBigData( src );
+	//readRand(src);
 	cout << CalTimeVS( src ) << endl;
 	cout << CalTimeInterpolative( src ) << endl;
 	return 0;

@@ -191,21 +191,50 @@ VSEncoder::VSEncoder( std::string& buf_, int maxK_ )
 
 }
 
-/*unsigned int VSEncoder::get_optimal_split2(const std::vector<unsigned int>& L, std::vector<unsigned int>& S)
+unsigned int VSEncoder::get_optimal_split2(const std::vector<unsigned int>& L, std::vector<unsigned int>& S)
 {
 	unsigned int n = L.size();
+	double min_good_bytes_ratio = 0.3; 
 	int pre_p, cur_p;
 	pre_p = cur_p = 0;
 	int max_bits = 0;
+	int cur_bits = 0;
 	int used_bits = 0;
 	int good_bits = 0;
-}*/
+	bool is_done = false;
+	S.push_back(0);
+	while (true)
+	{
+		if (cur_p == n) {
+			S.push_back(cur_p);
+			break;
+		}
+		cur_bits = log2(L[cur_p]);
+		if (max_bits < cur_bits) {
+			max_bits = cur_bits;
+			used_bits = (cur_p-pre_p+1)*max_bits;
+		} else {
+			used_bits += max_bits;
+		}
+		good_bits += cur_bits;
+		if ((float)good_bits/(float)used_bits < min_good_bytes_ratio) {
+			S.push_back(cur_p);
+			max_bits = 0;
+			cur_bits = 0;
+			used_bits = 0;
+			good_bits = 0;
+			pre_p = cur_p;
+			continue;
+		}
+		++cur_p;
+	}
+	return 0;
+}
 
 unsigned int VSEncoder::get_optimal_split( const std::vector<unsigned int>& L, std::vector<unsigned int>& S )
 {
 	unsigned int n = L.size();
 	std::vector<unsigned int> E,P;
-	unsigned log2nfalse = log2(n,false);
 	std::vector<unsigned> log2L;
 	log2L.resize(n);
 	for (int i=0 ; i<(int)n ; ++i )
@@ -240,9 +269,7 @@ unsigned int VSEncoder::get_optimal_split( const std::vector<unsigned int>& L, s
 				b = cur_bits;
 			}
 			//unsigned int cost_j_i = (i-j)*b+get_Gamma_encode_length(b+1)+get_Unary_encode_length(i-j);
-			//cost_j_i = (i-j)*b+2*log2(n,false)+1+i-j;
-			cost_j_i = (i-j)*b+2*log2nfalse+1+i-j;
-			//cost_j_i = (i-j)*(b+1);
+			cost_j_i = (i-j)*b+2*log2(b+1,false)+1+i-j;
 			if ( E[j]+cost_j_i < E[i] )
 			{
 				E[i] = E[j]+cost_j_i;
@@ -271,15 +298,16 @@ void VSEncoder::encode( const std::vector<unsigned int>& L_ )
 		L.push_back( L_[i+1]-L_[i] );
 	}
 	std::vector<unsigned int> S;
-	get_optimal_split( L, S );
-	//for ( int i = 0 ; i < (int)S.size()-1 ; ++i )
-	//{
-	//	encode( L, S[i], S[i+1] );
-	//}
-	for ( int i = S.size() - 1; i > 0; --i )
+	get_optimal_split2( L, S );
+	for ( int i = 0 ; i < (int)S.size()-1 ; ++i )
 	{
-		encode( L, S[i], S[i-1] );
+		encode( L, S[i], S[i+1] );
 	}
+	//get_optimal_split( L, S );
+	//for ( int i = S.size() - 1; i > 0; --i )
+	//{
+	//	encode( L, S[i], S[i-1] );
+	//}
 	buf += acc;
 	unsigned int last_entry = L_.back();
 	unsigned int n_entry = L.size();
