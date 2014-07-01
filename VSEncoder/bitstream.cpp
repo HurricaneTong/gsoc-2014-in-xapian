@@ -138,19 +138,6 @@ void GammaEncoder::encode( unsigned int n )
 
 void OrdinaryEncoder::encode( unsigned int n )
 {
-	//for ( int i = num_of_bits-1 ; i >= 0 ; i-- )
-	//{
-	//	acc <<= 1;
-	//	acc |= (n&(1<<i))>>i;
-	//	bits++;
-	//	//check_acc();
-	//	if ( bits == 8 )
-	//	{
-	//		buf += acc;
-	//		acc = 0;
-	//		bits = 0;
-	//	}
-	//}
 	unsigned int cur_width = num_of_bits;
 	while ( cur_width )
 	{
@@ -415,69 +402,7 @@ unsigned int UnaryDecoder::decode()
 			p_buf = -1;
 			p_bit = 8-bits;
 		}
-	}
-
-	/*unsigned char tmp;
-	if ( p_buf >= 0 )
-	{
-		tmp = buf[p_buf];
-	}
-	else
-	{
-		tmp = acc;
-	}
-	tmp = tmp << p_bit;
-	unsigned char mask_highest_bit = 128;
-	unsigned int n = 0;
-	while ( mask_highest_bit&tmp )
-	{
-		n++;
-		p_bit++;
-		if ( p_bit < 8 )
-		{
-			tmp = tmp << 1;
-		}
-		else
-		{
-			p_buf++;
-			p_bit = 0;
-			if ( p_buf < (int)buf.size()-1 )
-			{
-				tmp = buf[p_buf];
-			}
-			else
-			{
-				p_buf = -1;
-				tmp = acc;
-				tmp = tmp << (8-bits);
-				p_bit = 8-bits;
-			}
-		}
-	}
-	n++;
-	p_bit++;
-	if ( p_bit == 8 )
-	{
-		if ( p_buf >= 0 )
-		{
-			p_buf++;
-			if ( p_buf == (int)buf.size()-1 )
-			{
-				p_buf = -1;
-				p_bit = 8-bits;
-			}
-			else
-			{
-				p_bit = 0;
-			}
-
-		}
-	}
-	if ( p_buf == (int)buf.size()-1 )
-	{
-		p_buf = -1;
-	}*/
-	
+	}	
 	return n;
 }
 
@@ -533,6 +458,7 @@ unsigned int OrdinaryDecoder::decode()
 {
 	unsigned int n_bits = num_of_bits;
 	unsigned int n = 0;
+	int end_p_buf = (int)buf.size()-2;
 	while ( n_bits )
 	{
 		if ( p_buf != -1 )
@@ -546,7 +472,7 @@ unsigned int OrdinaryDecoder::decode()
 				p_bit += n_bits;
 				if ( p_bit == 8 )
 				{
-					if ( p_buf == (int)buf.size()-2 )
+					if ( p_buf == end_p_buf )
 					{
 						p_buf = -1;
 						p_bit = 8-bits;
@@ -565,7 +491,7 @@ unsigned int OrdinaryDecoder::decode()
 				n <<= (8-p_bit);
 				n |= tmp;
 				n_bits -= (8-p_bit);
-				if ( p_buf == (int)buf.size()-2 )
+				if ( p_buf == end_p_buf )
 				{
 					p_buf = -1;
 					p_bit = 8-bits;
@@ -591,48 +517,6 @@ unsigned int OrdinaryDecoder::decode()
 
 	}
 	return n;
-	/*unsigned int n_bits = num_of_bits;
-	unsigned int n = 0;
-	if ( p_buf == -1 )
-	{
-		while ( n_bits-- )
-		{
-			int tmp = get_bit_value( acc, p_bit );
-			p_bit++;
-			n = 2*n + tmp;
-		}
-	}
-	else
-	{
-		while ( n_bits-- )
-		{
-			int tmp = get_bit_value( buf[p_buf], p_bit );
-			n = 2*n + tmp;
-			p_bit++;
-			if ( p_bit == 8 )
-			{
-				p_bit = 0;
-				p_buf++;
-				if ( p_buf == (int)buf.size()-1 )
-				{
-					p_buf = -1;
-					p_bit = 8-bits;
-					break;
-				}
-			}
-		}
-		while ( p_buf == -1 && n_bits-- )
-		{
-			int tmp = get_bit_value( acc, p_bit );
-			p_bit++;
-			n = 2*n + tmp;
-		}
-	}
-	if ( p_buf == (int)buf.size()-1 )
-	{
-		p_buf = -1;
-	}
-	return n;*/
 }
 
 
