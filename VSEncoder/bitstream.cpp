@@ -167,20 +167,18 @@ void OrdinaryEncoder::encode( unsigned int n )
 	}
 }
 
-VSEncoder::VSEncoder( std::string& buf_, int maxK_ )
-	: buf( buf_ ), maxK( maxK_ )
+VSEncoder::VSEncoder( std::string& chunk_, int maxK_ )
+	: chunk(chunk_), maxK(maxK_)
 {
 	acc = 0;
 	bits = 0;
-
-	n_info = sizeof( unsigned int )/sizeof( unsigned char );
 
 
 }
 
 unsigned int VSEncoder::get_optimal_split2(const std::vector<unsigned int>& L, std::vector<unsigned int>& S)
 {
-	unsigned int n = L.size();
+	unsigned int n = (unsigned)L.size();
 	double min_good_bytes_ratio = 0.3; 
 	int pre_p, cur_p;
 	pre_p = cur_p = 0;
@@ -188,7 +186,6 @@ unsigned int VSEncoder::get_optimal_split2(const std::vector<unsigned int>& L, s
 	int cur_bits = 0;
 	int used_bits = 0;
 	int good_bits = 0;
-	bool is_done = false;
 	S.push_back(0);
 	while (true)
 	{
@@ -220,7 +217,7 @@ unsigned int VSEncoder::get_optimal_split2(const std::vector<unsigned int>& L, s
 
 unsigned int VSEncoder::get_optimal_split( const std::vector<unsigned int>& L, std::vector<unsigned int>& S )
 {
-	unsigned int n = L.size();
+	unsigned int n = (unsigned)L.size();
 	std::vector<unsigned int> E,P;
 	std::vector<unsigned> log2L;
 	log2L.resize(n);
@@ -250,7 +247,6 @@ unsigned int VSEncoder::get_optimal_split( const std::vector<unsigned int>& L, s
 		for ( int j = i-1 ; j >= down_edge ; --j )
 		{
 			cur_bits = log2L[j];
-			//cur_bits = log2(L[j]);
 			if( b< cur_bits )
 			{
 				b = cur_bits;
@@ -267,11 +263,9 @@ unsigned int VSEncoder::get_optimal_split( const std::vector<unsigned int>& L, s
 	unsigned int cur = n;
 	while ( P[cur] != cur )
 	{
-		//S.insert( S.begin(), cur );
 		S.push_back(cur);
 		cur = P[cur];
 	}
-	//S.insert( S.begin(), cur );
 	S.push_back(cur);
 	return E[n];
 }
@@ -295,22 +289,14 @@ void VSEncoder::encode( const std::vector<unsigned int>& L_ )
 	//{
 	//	encode( L, S[i], S[i-1] );
 	//}
-	buf += acc;
+    string header;
+	header += acc;
+    header += (char)bits&0xff;
 	unsigned int last_entry = L_.back();
-	unsigned int n_entry = L.size();
-	std::string tmp;
-	tmp += bits;
-	for ( int i = 0 ; i < n_info ; ++i )
-	{
-		tmp += n_entry & 0xff;
-		n_entry >>= 8;
-	}
-	for ( int i = 0 ; i < n_info ; ++i )
-	{
-		tmp += last_entry & 0xff;
-		last_entry >>= 8;
-	}
-	buf.insert( 0, tmp );
+	unsigned int n_entry = (unsigned)L.size();
+    pack_uint(header, n_entry);
+    pack_uint(header, last_entry);
+    chunk += header+buf;
 }
 
 void VSEncoder::encode( const std::vector<unsigned int>& L, int pstart, int pend )
@@ -351,40 +337,39 @@ inline unsigned int Decoder::get_bit_value( unsigned int n, int i )
 unsigned int UnaryDecoder::decode()
 {
 	unsigned int n = 0;
-	unsigned char* p_cur = 0;
-	if ( p_buf >= 0 )
+    char cur_data = 0;
+    if (pos != end)
 	{
-		p_cur = (unsigned char*)&buf[p_buf];
+		cur_data = *pos;
 	}
 	else
 	{
-		p_cur = &acc;
+		cur_data = (char)acc;
 	}
 	unsigned char cur_bit = 0;
-	cur_bit = *p_cur&mask[p_bit];
+	cur_bit = cur_data&mask[p_bit];
 	while ( cur_bit )
 	{
 		n++;
 		p_bit++;
 		if ( p_bit < 8)
 		{
-			cur_bit = *p_cur&mask[p_bit];
+			cur_bit = cur_data&mask[p_bit];
 		}
 		if ( p_bit == 8 )
 		{
-			if ( p_buf < (int)buf.size()-2 )
+            pos++;
+			if (pos != end)
 			{
-				p_buf++;
 				p_bit = 0;
-				p_cur = (unsigned char*)&buf[p_buf];
-				cur_bit = *p_cur&mask[p_bit];
+                cur_data = *pos;
+				cur_bit = cur_data&mask[p_bit];
 			}
-			else if ( p_buf == (int)buf.size()-2 )
+			else
 			{
-				p_buf = -1;
-				p_bit = 8-bits;
-				p_cur = &acc;
-				cur_bit = *p_cur&mask[p_bit];
+                p_bit = 8-acc_bits;
+				cur_data = (char)acc;
+				cur_bit = cur_data&mask[p_bit];
 			}
 		}
 	}
@@ -392,113 +377,110 @@ unsigned int UnaryDecoder::decode()
 	p_bit++;
 	if ( p_bit == 8 )
 	{
-		if ( p_buf < (int)buf.size()-2 )
-		{
-			p_buf++;
-			p_bit = 0;
-		}
-		else if ( p_buf == (int)buf.size()-2 )
-		{
-			p_buf = -1;
-			p_bit = 8-bits;
-		}
+        pos++;
+        if (pos != end)
+        {
+            p_bit = 0;
+            cur_data = *pos;
+            cur_bit = cur_data&mask[p_bit];
+        }
+        else
+        {
+            p_bit = 8-acc_bits;
+            cur_data = (char)acc;
+            cur_bit = cur_data&mask[p_bit];
+        }
 	}	
 	return n;
 }
 
 unsigned int GammaDecoder::decode()
 {
-	p_ud->assign( buf, acc, bits, p_buf, p_bit );
 	unsigned int n_bits = p_ud->decode();
 	unsigned int n = 1;
+    char cur_data = 0;
 	n_bits--;
-	if ( p_buf == -1 )
+	if (pos == end)
 	{
 		while ( n_bits-- )
 		{
 			int tmp = get_bit_value( acc, p_bit );
 			p_bit++;
-			n = 2*n + tmp;
+			n = n*2 + tmp;
 		}
 	}
 	else
 	{
+        cur_data = *pos;
 		while ( n_bits-- )
 		{
-			int tmp = get_bit_value( buf[p_buf], p_bit );
+			int tmp = get_bit_value(cur_data, p_bit);
 			n = 2*n + tmp;
 			p_bit++;
 			if ( p_bit == 8 )
 			{
 				p_bit = 0;
-				p_buf++;
-				if ( p_buf == (int)buf.size()-1 )
+				pos++;
+				if (pos == end)
 				{
-					p_buf = -1;
-					p_bit = 8-bits;
+					cur_data = acc;
+					p_bit = 8-acc_bits;
+                    while (n_bits--)
+                    {
+                        int tmp = get_bit_value(acc, p_bit);
+                        p_bit++;
+                        n = 2*n + tmp;
+                    }
 					break;
 				}
+                cur_data = *pos;
 			}
 		}
-		while ( p_buf == -1 && n_bits-- )
-		{
-			int tmp = get_bit_value( acc, p_bit );
-			p_bit++;
-			n = 2*n + tmp;
-		}
-	}
-	if ( p_buf == (int)buf.size()-1 )
-	{
-		p_buf = -1;
 	}
 	return n;
 }
 
 unsigned int OrdinaryDecoder::decode()
 {
-	unsigned int n_bits = num_of_bits;
+	unsigned int n_bits = width;
 	unsigned int n = 0;
-	int end_p_buf = (int)buf.size()-2;
 	while ( n_bits )
 	{
-		if ( p_buf != -1 )
+		if (pos != end)
 		{
-			if ( n_bits <= (unsigned int)8-p_bit )
+			if (n_bits <= (unsigned int)8-p_bit)
 			{
 				n <<= n_bits;
-				unsigned char tmp = buf[p_buf]&mask_nbits[p_bit][n_bits];
+				unsigned char tmp = (*pos)&mask_nbits[p_bit][n_bits];
 				tmp >>= ( 8-p_bit-n_bits );
 				n |= tmp;
 				p_bit += n_bits;
 				if ( p_bit == 8 )
 				{
-					if ( p_buf == end_p_buf )
+                    pos++;
+					if (pos == end)
 					{
-						p_buf = -1;
-						p_bit = 8-bits;
+						p_bit = 8-acc_bits;
 					}
 					else
 					{
-						p_buf++;
-						p_bit = 0;
+                        p_bit = 0;
 					}
 				}
 				return n;
 			}
 			else
 			{
-				unsigned char tmp = buf[p_buf]&mask_nbits[p_bit][8-p_bit];
+				unsigned char tmp = (*pos)&mask_nbits[p_bit][8-p_bit];
 				n <<= (8-p_bit);
 				n |= tmp;
 				n_bits -= (8-p_bit);
-				if ( p_buf == end_p_buf )
+				if (pos == end)
 				{
-					p_buf = -1;
-					p_bit = 8-bits;
+					p_bit = 8-acc_bits;
 				}
 				else
 				{
-					p_buf++;
 					p_bit = 0;
 				}
 				continue;
@@ -520,7 +502,7 @@ unsigned int OrdinaryDecoder::decode()
 }
 
 
-void VSDecoder::decode( std::vector< unsigned int >& R )
+/*void VSDecoder::decode( std::vector< unsigned int >& R )
 {
 	while ( !( p_buf == -1 && p_bit == 8 ) )
 	{
@@ -535,29 +517,31 @@ void VSDecoder::decode( std::vector< unsigned int >& R )
 		}
 
 	}
-}
+}*/
 
 VSDecoder::VSDecoder( std::string& buf_ )
-	: buf( buf_ ), acc( buf[buf.size()-1] ), bits( buf[0] )
+	: buf(buf_), acc(buf[0]), acc_bits(buf[1])
 {
-	n_info = sizeof( unsigned int )/sizeof( unsigned char );
 	bias = -1;
-	if ( (int)buf.size() == 2+2*n_info )
+    pos = buf.data()+2;
+    end = buf.data()+buf.size();
+    unpack_uint(&pos, end, &n_entry);
+    unpack_uint(&pos, end, &last_entry);
+    
+	if (pos == end)
 	{
-		p_buf = -1;
-		p_bit = 8-bits;
+		p_bit = 8-acc_bits;
 	}
 	else
 	{
-		p_buf = 1+2*n_info;
 		p_bit = 0;
 	}
-	p_gd = new GammaDecoder( buf, acc, bits, p_buf, p_bit );
+	p_gd = new GammaDecoder(pos, end, acc, acc_bits, p_bit);
 	cur_num_width = p_gd->decode()-1;
-	p_ud = new UnaryDecoder( buf, acc, bits, p_buf, p_bit );
+	p_ud = new UnaryDecoder(pos, end, acc, acc_bits, p_bit);
 	cur_remaining_nums = p_ud->decode();
-	p_od = new OrdinaryDecoder( buf, acc, bits, p_buf, p_bit, cur_num_width );
-	//p_od->setWidth( cur_num_width );
+	p_od = new OrdinaryDecoder(pos, end, acc, acc_bits, p_bit, cur_num_width);
+	p_od->setWidth(cur_num_width);
 
 }
 
@@ -575,7 +559,7 @@ unsigned int VSDecoder::get_next_entry()
 
 unsigned int VSDecoder::next()
 {
-	if ( p_buf == -1 && p_bit == 8 )
+	if ( pos == end && p_bit == 8 )
 	{
 		return ~0;
 	}
@@ -596,25 +580,11 @@ unsigned int VSDecoder::next()
 
 unsigned int VSDecoder::get_n_entry()
 {
-	unsigned int n_entry = 0;
-	for ( int i = n_info ; i > 0 ; i-- )
-	{
-		n_entry <<= 8;
-		unsigned char tmp = buf[i];
-		n_entry |= tmp;
-	}
 	return n_entry;
 }
 
 unsigned int VSDecoder::get_last_entry()
 {
-	unsigned int last_entry = 0;
-	for ( int i = 2*n_info ; i > n_info ; i-- )
-	{
-		last_entry <<= 8;
-		unsigned char tmp = buf[i];
-		last_entry |= tmp;
-	}
 	return last_entry;
 }
 VSDecoder::~VSDecoder()

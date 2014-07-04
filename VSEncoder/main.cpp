@@ -1,6 +1,5 @@
 #define CRTDBG_MAP_ALLOC  
-#include <stdlib.h>  
-#include <crtdbg.h>  
+#include <stdlib.h>
 #include "bitstream.h"
 #include "vector"
 #include "iostream"
@@ -21,7 +20,7 @@ void testVSEncoding()
 		L.push_back(i);
 		vse.encode(L);
 		VSDecoder vsd( buf );
-		vsd.decode(R);
+		//vsd.decode(R);
 		if ( R[0] != L[0] )
 		{
 			cout << "error!" << endl;
@@ -31,7 +30,7 @@ void testVSEncoding()
 
 void genRand()
 {
-	ofstream out( "randNum.txt" );
+	ofstream out( "/Users/HurricaneTong/code/Xapian_dev/VSEncoder/randNum" );
 	srand(time(NULL));
 	for ( int i = 1 ; i < 0xffffff ; i = i+rand()%50+50 )
 	{
@@ -47,7 +46,7 @@ void genRand()
 
 void readRand( vector<unsigned int>& src )
 {
-	ifstream in( "randNum.txt" );
+	ifstream in( "/Users/HurricaneTong/code/Xapian_dev/VSEncoder/randNum" );
 	int tmp = 0;
 	in >> tmp;
 	while ( tmp != -1 )
@@ -60,7 +59,7 @@ void readRand( vector<unsigned int>& src )
 
 void readBigData( vector<unsigned int>& src )
 {
-	ifstream in( "Z:\\linux.postlist" );
+	ifstream in( "/Users/HurricaneTong/code/Xapian_dev/VSEncoder/linux.postlist" );
 	int tmp = 0;
 	in >> tmp;
 	while ( !in.eof() )
@@ -99,77 +98,6 @@ double CalTimeVS( const vector<unsigned int>& src )
 	endT = clock();
 	costT = endT-startT;
 	return costT;
-}
-
-template<class U>
-inline void
-	pack_uint(std::string & s, U value)
-{
-	// Check U is an unsigned type.
-	while (value >= 128) {
-		s += static_cast<char>(static_cast<unsigned char>(value) | 0x80);
-		value >>= 7;
-	}
-	s += static_cast<char>(value);
-}
-
-template<class U>
-inline bool
-	unpack_uint(const char ** p, const char * end, U * result)
-{
-	// Check U is an unsigned type.
-
-	const char * ptr = *p;
-	const char * start = ptr;
-
-	// Check the length of the encoded integer first.
-	do {
-		if ((ptr == end)) {
-			// Out of data.
-			*p = NULL;
-			return false;
-		}
-	} while (static_cast<unsigned char>(*ptr++) >= 128);
-
-	*p = ptr;
-
-	if (!result) return true;
-
-	*result = U(*--ptr);
-	if (ptr == start) {
-		// Special case for small values.
-		return true;
-	}
-
-	size_t maxbits = size_t(ptr - start) * 7;
-	if (maxbits <= sizeof(U) * 8) {
-		// No possibility of overflow.
-		do {
-			unsigned char chunk = static_cast<unsigned char>(*--ptr) & 0x7f;
-			*result = (*result << 7) | U(chunk);
-		} while (ptr != start);
-		return true;
-	}
-
-	size_t minbits = maxbits - 6;
-	if ((minbits > sizeof(U) * 8)) {
-		// Overflow.
-		return false;
-	}
-
-	while (--ptr != start) {
-		unsigned char chunk = static_cast<unsigned char>(*--ptr) & 0x7f;
-		*result = (*result << 7) | U(chunk);
-	}
-
-	U tmp = *result;
-	*result <<= 7;
-	if ((*result < tmp)) {
-		// Overflow.
-		return false;
-	}
-	*result |= U(static_cast<unsigned char>(*ptr) & 0x7f);
-	return true;
 }
 
 double CalTimeInterpolative( const vector<unsigned int>& vec)
@@ -215,8 +143,8 @@ double CalTimeInterpolative( const vector<unsigned int>& vec)
 int main()
 {
 	vector<unsigned int> src;
-	readBigData( src );
-	//readRand(src);
+	//readBigData( src );
+	readRand(src);
 	cout << CalTimeVS( src ) << endl;
 	cout << CalTimeInterpolative( src ) << endl;
 	return 0;

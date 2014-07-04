@@ -6,6 +6,8 @@
 #include <vector>
 #include "math.h"
 
+#include "pack.h"
+
 inline int log2(unsigned val, bool up = true );
 
 namespace Xapian {
@@ -80,7 +82,8 @@ class VSEncoder
 private:
 	int bits;
 	unsigned char acc;
-	std::string& buf;
+    string& chunk;
+	string buf;
 	int maxK;
 	int n_info;
 	unsigned int get_optimal_split( const std::vector<unsigned int>& L, std::vector<unsigned int>& S );
@@ -88,13 +91,13 @@ private:
 	void encode( const std::vector<unsigned int>& L, int i, int j );
 
 public:
-	VSEncoder( std::string& buf_, int maxK_ = 64 );
+	VSEncoder( std::string& chunk_, int maxK_ = 64 );
 	void encode( const std::vector<unsigned int>& L );
 };
 
 //Decoder.h
 
-class Decoder
+/*class Decoder
 {
 protected:
 	std::string& buf;
@@ -122,14 +125,39 @@ public:
 	{
 
 	}
+};*/
+    
+class Decoder
+{
+protected:
+    const char*& pos;
+    const char* end;
+    unsigned char& acc;
+    int& acc_bits;
+    int& p_bit;
+    static unsigned int mask[8];
+    static unsigned int get_bit_value(unsigned int n, int i);
+public:
+    virtual unsigned int decode() = 0;
+    Decoder(const char*& pos_, const char* end_, unsigned char& acc_, int& acc_bits_, int& p_bit_)
+		: pos(pos_), end(end_), acc( acc_ ), acc_bits(acc_bits_), p_bit(p_bit_)
+    {
+        
+    }
+    virtual ~Decoder()
+    {
+        
+    }
 };
+    
+    
 
 class UnaryDecoder : public Decoder
 {
 public:
 	unsigned int decode();
-	UnaryDecoder( std::string& buf_, unsigned char& acc_, int& bits_, int& p_buf_, int& p_bit_ )
-		: Decoder( buf_, acc_, bits_, p_buf_, p_bit_ )
+	UnaryDecoder(const char*& pos_, const char* end_, unsigned char& acc_, int& acc_bits_, int& p_bit_)
+		: Decoder(pos_, end_, acc_, acc_bits_, p_bit_)
 	{
 
 	}
@@ -142,10 +170,10 @@ private:
 	UnaryDecoder* p_ud;
 public:
 	unsigned int decode();
-	GammaDecoder( std::string& buf_, unsigned char& acc_, int& bits_, int& p_buf_, int& p_bit_ )
-		: Decoder( buf_, acc_, bits_, p_buf_, p_bit_ )
+	GammaDecoder(const char*& pos_, const char* end_, unsigned char& acc_, int& acc_bits_, int& p_bit_)
+		: Decoder(pos_, end_, acc_, acc_bits_, p_bit_)
 	{
-		p_ud = new UnaryDecoder( buf, acc, bits, p_buf, p_bit );
+		p_ud = new UnaryDecoder(pos_, end_, acc_, acc_bits_, p_bit_);
 	}
 	~GammaDecoder()
 	{
@@ -161,18 +189,18 @@ public:
 class OrdinaryDecoder : public Decoder
 {
 private:
-	int num_of_bits;
+	int width;
 	static const unsigned char mask_nbits[8][9];
 public:
 	unsigned int decode();
-	OrdinaryDecoder( std::string& buf_, unsigned char& acc_, int& bits_, int& p_buf_, int& p_bit_, int num_of_bits_ )
-		: Decoder( buf_, acc_, bits_, p_buf_, p_bit_ ), num_of_bits( num_of_bits_ )
+	OrdinaryDecoder(const char*& pos_, const char* end_, unsigned char& acc_, int& acc_bits_, int& p_bit_, int width_)
+		: Decoder(pos_, end_, acc_, acc_bits_, p_bit_), width(width_)
 	{
 
 	}
-	void setWidth( int num_of_bits_ )
+	void setWidth( int width_ )
 	{
-		num_of_bits = num_of_bits_;
+		width = width_;
 	}
 };
 
@@ -182,9 +210,10 @@ class VSDecoder
 private:
 	std::string buf;
 	unsigned char acc;
-	int bits;
-	int p_buf, p_bit;//the bit pointed by p_bit hasn't be handled. 
-	int n_info;
+	int acc_bits;
+	int p_bit;//the bit pointed by p_bit hasn't be handled.
+    const char* pos;
+    const char* end;
 	unsigned int cur_num_width;
 	unsigned int cur_remaining_nums;
 	UnaryDecoder* p_ud;
@@ -192,8 +221,10 @@ private:
 	OrdinaryDecoder* p_od;
 	unsigned int bias;
 	unsigned int next();
+    unsigned int n_entry;
+    unsigned int last_entry;
 public:
-	void decode( std::vector< unsigned int >& R );
+	//void decode( std::vector< unsigned int >& R );
 	VSDecoder( std::string& buf_ );
 	unsigned int get_next_entry();
 	unsigned int get_first_entry();
