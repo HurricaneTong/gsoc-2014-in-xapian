@@ -140,12 +140,85 @@ double CalTimeInterpolative( const vector<unsigned int>& vec)
 	return costT;
 }
 
+void testUE()
+{
+    string buf;
+    unsigned char acc = 0;
+    int bits = 0;
+    int s[] = {2,5,7,9,24,6};
+    vector<unsigned> src(s,s+6);
+    Xapian::UnaryEncoder ue(buf,acc,bits);
+    for (int i=0; i<(int)src.size(); ++i) {
+        ue.encode(src[i]);
+    }
+    const char* pos = buf.data();
+    const char* end = pos+buf.size();
+    int p_bit = 0;
+    Xapian::UnaryDecoder ud(pos,end,acc,bits,p_bit);
+    for (int i=0; i<(int)src.size(); ++i) {
+        unsigned r = ud.decode();
+        if ( r!=src[i]) {
+            cout << "error: " << src[i] << ":" << r << endl;
+        }
+    }
+    
+}
+
+void testGE()
+{
+    string buf;
+    unsigned char acc = 0;
+    int bits = 0;
+    int s[] = {2,5,7,9,24,6};
+    vector<unsigned> src(s,s+6);
+    Xapian::GammaEncoder ue(buf,acc,bits);
+    for (int i=0; i<(int)src.size(); ++i) {
+        ue.encode(src[i]);
+    }
+    const char* pos = buf.data();
+    const char* end = pos+buf.size();
+    int p_bit = 0;
+    Xapian::GammaDecoder ud(pos,end,acc,bits,p_bit);
+    for (int i=0; i<(int)src.size(); ++i) {
+        unsigned r = ud.decode();
+        if ( r!=src[i]) {
+            cout << "error: " << src[i] << ":" << r << endl;
+        }
+    }
+    
+}
+
+void testOE()
+{
+    string buf;
+    unsigned char acc = 0;
+    int bits = 0;
+    int s[] = {2,5,7,9,24,6};
+    vector<unsigned> src(s,s+6);
+    Xapian::OrdinaryEncoder ue(buf,acc,bits,5);
+    for (int i=0; i<(int)src.size(); ++i) {
+        ue.encode(src[i]);
+    }
+    const char* pos = buf.data();
+    const char* end = pos+buf.size();
+    int p_bit = 0;
+    Xapian::OrdinaryDecoder ud(pos,end,acc,bits,p_bit,5);
+    for (int i=0; i<(int)src.size(); ++i) {
+        unsigned r = ud.decode();
+        if ( r!=src[i]) {
+            cout << "error: " << src[i] << ":" << r << endl;
+        }
+    }
+    
+}
+
 int main()
 {
 	vector<unsigned int> src;
-	//readBigData( src );
-	readRand(src);
+	readBigData( src );
+	//readRand(src);
 	cout << CalTimeVS( src ) << endl;
 	cout << CalTimeInterpolative( src ) << endl;
+
 	return 0;
 }

@@ -293,7 +293,7 @@ void VSEncoder::encode( const std::vector<unsigned int>& L_ )
 	header += acc;
     header += (char)bits&0xff;
 	unsigned int last_entry = L_.back();
-	unsigned int n_entry = (unsigned)L.size();
+	unsigned int n_entry = (unsigned)L_.size();
     pack_uint(header, n_entry);
     pack_uint(header, last_entry);
     chunk += header+buf;
@@ -475,6 +475,7 @@ unsigned int OrdinaryDecoder::decode()
 				n <<= (8-p_bit);
 				n |= tmp;
 				n_bits -= (8-p_bit);
+                pos++;
 				if (pos == end)
 				{
 					p_bit = 8-acc_bits;
