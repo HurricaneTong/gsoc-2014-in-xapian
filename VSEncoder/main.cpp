@@ -212,13 +212,29 @@ void testOE()
     
 }
 
+void testVS()
+{
+    string chunk;
+    Xapian::VSEncoder ve(chunk);
+    int s[] = {2,5,7,9,24,6};
+    vector<unsigned> src(s,s+6);
+    ve.encode(src);
+    Xapian::VSDecoder vd(chunk);
+    int t1 = vd.get_first_entry();
+    int t2 = vd.get_last_entry();
+    int t3 = vd.get_n_entry();
+    int t4 = vd.get_next_entry();
+    
+    
+}
+
 int main()
 {
-	vector<unsigned int> src;
-	readBigData( src );
+	//vector<unsigned int> src;
+	//readBigData( src );
 	//readRand(src);
-	cout << CalTimeVS( src ) << endl;
-	cout << CalTimeInterpolative( src ) << endl;
-
+	//cout << CalTimeVS( src ) << endl;
+	//cout << CalTimeInterpolative( src ) << endl;
+    testVS();
 	return 0;
 }
