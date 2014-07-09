@@ -36,6 +36,10 @@ const unsigned char Xapian::OrdinaryDecoder::mask_nbits[8][9] =
 	0, 0x1, 0, 0, 0, 0, 0, 0, 0
 };
 
+const unsigned char Xapian::UnaryEncoder::mask_1s[8] = {
+    0x1, 0x3, 0x7, 0xf, 0x1f, 0x3f, 0x7f, 0xff
+};
+
 const unsigned int Xapian::OrdinaryEncoder::mask_low_n_bits[9] =
 {
 	0,0x1,0x3,0x7,0xf,0x1f,0x3f,0x7f,0xff
@@ -97,19 +101,44 @@ inline bool Encoder::check_acc()
 	return false;
 }
 
-void UnaryEncoder::encode( unsigned int n )
-{
-	for ( int i = 0 ; i < (int)n-1 ; ++i )
-	{
-		acc <<= 1;
-		acc |= 1;
-		bits++;
-		check_acc();
-	}
-	acc = acc << 1;
-	bits++;
-	check_acc();
-}
+    void UnaryEncoder::encode(unsigned int n) {
+        int num_of_1s = n-1;
+        if (n == 1) {
+            acc <<= 1;
+            bits++;
+            check_acc();
+            return;
+        }
+        if (bits + num_of_1s <= 8) {
+            acc <<= num_of_1s;
+            bits += num_of_1s;
+            acc |= mask_1s[num_of_1s-1];
+            check_acc();
+            acc <<= 1;
+            bits++;
+            check_acc();
+            return;
+        }
+        
+        acc <<= 8-bits;
+        acc |= mask_1s[7-bits];
+        buf += acc;
+        num_of_1s -= 8-bits;
+        acc = 0;
+        bits = 0;
+        while (num_of_1s > 8) {
+            buf += (char)0xff;
+            num_of_1s -= 8;
+        }
+        
+        acc |= mask_1s[num_of_1s-1];
+        bits = num_of_1s;
+        check_acc();
+        
+        acc = acc << 1;
+        bits++;
+        check_acc();
+    }
 
 void GammaEncoder::encode( unsigned int n )
 {

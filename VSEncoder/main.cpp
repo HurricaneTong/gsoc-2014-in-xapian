@@ -145,8 +145,8 @@ void testUE()
     string buf;
     unsigned char acc = 0;
     int bits = 0;
-    int s[] = {2,5,7,9,24,6};
-    vector<unsigned> src(s,s+6);
+    int s[] = {2,1,5,7,8,9,24,6,123,16};
+    vector<unsigned> src(s,s+10);
     Xapian::UnaryEncoder ue(buf,acc,bits);
     for (int i=0; i<(int)src.size(); ++i) {
         ue.encode(src[i]);
@@ -235,6 +235,6 @@ int main()
 	//readRand(src);
 	//cout << CalTimeVS( src ) << endl;
 	//cout << CalTimeInterpolative( src ) << endl;
-    testVS();
+    testUE();
 	return 0;
 }

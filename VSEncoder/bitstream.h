@@ -42,6 +42,7 @@ public:
 
 class UnaryEncoder : public Encoder
 {
+    static const unsigned char mask_1s[8];
 public:
 	UnaryEncoder( std::string& buf_, unsigned char& acc_, int& bits_ )
 		: Encoder( buf_, acc_, bits_ )
@@ -49,6 +50,7 @@ public:
 
 	}
 	void encode( unsigned int n );
+    
 
 };
 
