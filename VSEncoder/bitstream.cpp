@@ -40,9 +40,11 @@ const unsigned char Xapian::UnaryEncoder::mask_1s[8] = {
     0x1, 0x3, 0x7, 0xf, 0x1f, 0x3f, 0x7f, 0xff
 };
 
-const unsigned int Xapian::OrdinaryEncoder::mask_low_n_bits[9] =
-{
-	0,0x1,0x3,0x7,0xf,0x1f,0x3f,0x7f,0xff
+const unsigned int Xapian::Encoder::mask_low_n_bits[33] = {
+	0,0x1,0x3,0x7,0xf,0x1f,0x3f,0x7f,0xff,
+    0x1ff,0x3ff,0x7ff,0xfff,0x1fff,0x3fff,0x7fff,0xffff,
+    0x1ffff,0x3ffff,0x7ffff,0xfffff,0x1fffff,0x3fffff,0x7fffff,0xffffff,
+    0x1ffffff,0x3ffffff,0x7ffffff,0xfffffff,0x1fffffff,0x3fffffff,0x7fffffff,0xffffffff
 };
 
 // @return : the value returned is an integer which is no less than log2(@val) when @up is ture, 
@@ -140,30 +142,29 @@ inline bool Encoder::check_acc()
         check_acc();
     }
 
-void GammaEncoder::encode( unsigned int n )
-{
-	int n_bin_bits = log2(n,false)+1;
-	UnaryEncoder u( buf, acc, bits );
-	u.encode(n_bin_bits);
-	unsigned int mask = 0;
-	for ( int i = 0 ; i < n_bin_bits-1 ; ++i )
-	{
-		mask = mask << 1;
-		mask = mask | 1;
-	}
-	n = n & mask;
-
-	n_bin_bits--;
-
-	for ( int i = n_bin_bits-1 ; i >= 0 ; i-- )
-	{
-		acc <<= 1;
-		acc |= (n&(1<<i))>>i;
-		bits++;
-		check_acc();
-	}
-
-}
+    void GammaEncoder::encode(unsigned int n) {
+        
+        // get |bin(@n)|
+        int n_bin_bits = log2(n,false)+1;
+        
+        // encode |bin(@n)| using Unary Encoder
+        UnaryEncoder u(buf, acc, bits);
+        u.encode(n_bin_bits);
+        
+        // get low |bin(@n)|-1 bits of @n
+        n = n & mask_low_n_bits[n_bin_bits-1];
+        
+        // the highest bit needn't encoding
+        n_bin_bits--;
+        
+        // encoding one bit every time
+        for (int i = n_bin_bits-1 ; i >= 0 ; i--) {
+            acc <<= 1;
+            acc |= (n&(1<<i))>>i;
+            bits++;
+            check_acc();
+        }
+    }
 
 void OrdinaryEncoder::encode( unsigned int n )
 {

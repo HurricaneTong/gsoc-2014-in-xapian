@@ -169,7 +169,7 @@ void testGE()
     string buf;
     unsigned char acc = 0;
     int bits = 0;
-    int s[] = {2,5,7,9,24,6};
+    int s[] = {1,2,7,9,24,6};
     vector<unsigned> src(s,s+6);
     Xapian::GammaEncoder ue(buf,acc,bits);
     for (int i=0; i<(int)src.size(); ++i) {
@@ -235,6 +235,6 @@ int main()
 	//readRand(src);
 	//cout << CalTimeVS( src ) << endl;
 	//cout << CalTimeInterpolative( src ) << endl;
-    testUE();
+    testGE();
 	return 0;
 }
