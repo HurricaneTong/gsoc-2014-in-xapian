@@ -9,6 +9,7 @@ using std::map;
 using std::string;
 typedef unsigned int docid;
 typedef unsigned int doclength;
+typedef unsigned int termcount;
 
 int cal_level( unsigned size );
 
@@ -27,16 +28,21 @@ public:
 	void encode( string& chunk ) const;
 };
 
-class SkipListReader
-{
-private:
+class SkipListReader {
+    const char* ori_pos;
 	const char* pos;
 	const char* end;
-	string chunk;
+    bool at_end;
+    docid did;
+    docid first_did;
+    termcount wdf;
+    termcount first_wdf;
 	unsigned readCurrent();
 public:
+    bool jump_to( docid desired_did );
+    bool next();
 	bool getDoclen( docid did, doclength* len );
-	SkipListReader( const string& chunk_ );
+	SkipListReader( const char* pos_, const char* end_, docid first_did_ );
 };
 
 class SkipListWriter

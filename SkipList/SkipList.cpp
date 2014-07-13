@@ -326,11 +326,60 @@ void SkipList::encode( string& chunk ) const
 
 }
 
-SkipListReader::SkipListReader( const string& chunk_ )
-	: chunk(chunk_)
-{
-	pos = chunk.data();
-	end = pos+chunk.size();
+SkipListReader::SkipListReader(const char* pos_, const char* end_, docid first_did_)
+: ori_pos(pos_), pos(pos_), end(end_), first_did(first_did_) {
+    if (pos != end){
+        at_end = false;
+        did = first_did;
+        next();
+        first_wdf = wdf;
+    } else {
+        at_end = true;
+    }
+    did = first_did;
+    wdf = 0;
+    next();
+}
+
+bool SkipListReader::jump_to(docid desired_did) {
+    if (did == desired_did) {
+        return true;
+    }
+    if (did > desired_did) {
+        pos = ori_pos;
+        did = first_did;
+        next();
+    }
+    while (true) {
+        if (did > desired_did) {
+            return false;
+        }
+        if (did == desired_did) {
+            unpack_uint(&pos, end, &wdf);
+            return true;
+        }
+        termcount incre_did = 0;
+        unpack_uint(&pos, end, &incre_did);
+        if (incre_did == SEPERATOR) {
+            unsigned p_offset = 0;
+            unsigned d_offset = 0;
+            read_increase(&pos, end, &p_offset, &d_offset);
+            if (desired_did >= did+d_offset) {
+                pos += p_offset;
+                did += d_offset;
+            } else {
+                
+            }
+        }
+    }
+    return true;
+    
+    
+    
+}
+
+bool SkipListReader::next() {
+    return true;
 }
 
 unsigned SkipListReader::readCurrent()
@@ -343,7 +392,7 @@ unsigned SkipListReader::readCurrent()
 
 bool SkipListReader::getDoclen( docid did, doclength* len )
 {
-	pos = chunk.data();
+	pos = ori_pos;
 	int curPosition = 0;
 	docid curDid;
 	unpack_uint( &pos, end, &curDid );

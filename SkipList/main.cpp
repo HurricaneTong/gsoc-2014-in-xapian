@@ -11,18 +11,18 @@ using namespace std;
 
 void inputMap( map<docid,doclength>& postlist )
 {
-	//postlist[4]=3;
-	//postlist[5]=7;
-	//postlist[9]=2;
-	//postlist[15]=3;
-	//postlist[16]=4;
-	//postlist[18]=11;
-	//postlist[27]=20;
-	//postlist[37]=40;
-	for ( int i = 1 ; i<1024 ; ++i )
-	{
-		postlist[i] = 2*i;
-	}
+	postlist[4]=3;
+	postlist[5]=7;
+	postlist[9]=2;
+	postlist[15]=3;
+	postlist[16]=4;
+	postlist[18]=11;
+	postlist[27]=20;
+	postlist[37]=40;
+//	for ( int i = 1 ; i<1024 ; ++i )
+//	{
+//		postlist[i] = 2*i;
+//	}
 }
 
 void inputChanges( map<docid,doclength>& changes )
@@ -91,7 +91,9 @@ void mergeChanges( map<docid,doclength>& postlist, const map<docid,doclength>& c
 
 void test( const map<docid,doclength>& postlist, const string& chunk )
 {
-	SkipListReader slr(chunk);
+    const char* pos = chunk.data();
+    const char* end = pos+chunk.size();
+	SkipListReader slr(pos,end,0);
 	map<docid,doclength>::const_iterator it = postlist.begin();
 	for ( ; it!=postlist.end() ; ++it )
 	{
