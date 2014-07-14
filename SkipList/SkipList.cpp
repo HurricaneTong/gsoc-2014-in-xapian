@@ -103,7 +103,7 @@ read_increase( const char** p, const char* end, docid* incre_did, doclength* len
 	return true;
 }
 
-int cal_level( unsigned size )
+int SkipList::cal_level( unsigned size )
 {
 	return (int)(log10(size)/0.6);
 }
@@ -111,7 +111,6 @@ int cal_level( unsigned size )
 void SkipList::genDiffVector( const map<docid,doclength>& postlist )
 {
 	map<docid,doclength>::const_iterator it = postlist.begin(), pre_it = postlist.begin();
-	bias = (postlist.begin())->first;
 	for ( ; it!=postlist.end() ; ++it )
 	{
 		src.push_back(it->first-pre_it->first);
@@ -248,77 +247,15 @@ void SkipList::buildSkipList( int level )
 
 }
 
-int SkipList::getData( docid did, int* position ) const
-{
-	int curPosition = 0;
-	docid curDid = bias;
-	while ( true )
-	{
-		if ( curDid > did )
-		{
-			if ( position )
-			{
-				*position = curPosition;
-			}
-			return -1;
-		}
-		if ( curDid == did )
-		{
-			while ( src[curPosition] == (unsigned)-1 )
-			{
-				curPosition += 3;
-			}
-			if ( position )
-			{
-				*position = curPosition;
-			}
-			return src[curPosition+1];
-		}
-		if ( src[curPosition] == (unsigned)-1  )
-		{
-			int p_offset = src[curPosition+1];
-			int d_offset = src[curPosition+2];
-			curPosition += 3;
-			if ( did >= curDid+d_offset )
-			{
-				curPosition += p_offset;
-				curDid += d_offset;
-			}
-			else
-			{
-				if ( src[curPosition] != (unsigned)-1 )
-				{
-					curDid += src[curPosition];
-				}
-			}
-		}
-		else
-		{
-			curPosition += 2;
-			if ( curPosition >= (int)src.size() )
-			{
-				if ( position )
-				{
-					*position = curPosition;
-				}
-				return -1;
-			}
-			if ( src[curPosition] != (unsigned)-1 )
-			{
-				curDid += src[curPosition];
-			}
-		}
-	}
-}
 
 SkipList::SkipList( const map<docid,doclength>& postlist )
 {
 	genDiffVector(postlist);
+    buildSkipList( cal_level((unsigned)postlist.size()) );
 }
 
 void SkipList::encode( string& chunk ) const
 {
-	pack_uint( chunk,bias );
 	for ( int i = 0 ; i<(int)src.size() ; ++i )
 	{
 		pack_uint( chunk,src[i] );
@@ -332,13 +269,11 @@ SkipListReader::SkipListReader(const char* pos_, const char* end_, docid first_d
         at_end = false;
         did = first_did;
         next();
-        first_wdf = wdf;
     } else {
         at_end = true;
+        did = -1;
+        wdf = -1;
     }
-    did = first_did;
-    wdf = 0;
-    next();
 }
 
 bool SkipListReader::jump_to(docid desired_did) {
@@ -350,12 +285,11 @@ bool SkipListReader::jump_to(docid desired_did) {
         did = first_did;
         next();
     }
-    while (true) {
+    while (pos != end) {
         if (did > desired_did) {
             return false;
         }
         if (did == desired_did) {
-            unpack_uint(&pos, end, &wdf);
             return true;
         }
         termcount incre_did = 0;
@@ -367,9 +301,13 @@ bool SkipListReader::jump_to(docid desired_did) {
             if (desired_did >= did+d_offset) {
                 pos += p_offset;
                 did += d_offset;
+                read_increase(&pos, end, NULL, &wdf);
             } else {
                 
             }
+        } else {
+            did += incre_did;
+            unpack_uint(&pos, end, &wdf);
         }
     }
     return true;
@@ -379,98 +317,37 @@ bool SkipListReader::jump_to(docid desired_did) {
 }
 
 bool SkipListReader::next() {
+    if (at_end) {
+        return false;
+    }
+    termcount incre_did = 0;
+    unpack_uint(&pos, end, &incre_did);
+    while (incre_did == SEPERATOR) {
+        read_increase(&pos, end, NULL, NULL);
+        if (pos == end) {
+            at_end = true;
+            return true;
+        }
+        unpack_uint(&pos, end, &incre_did);
+    }
+    did += incre_did;
+    unpack_uint(&pos, end, &wdf);
     return true;
 }
 
-unsigned SkipListReader::readCurrent()
+SkipListWriter::SkipListWriter(const char* start_, const char* end_ , docid first_did_, BTree* bt_)
+: start(start_), end(end_), first_did(first_did_), bt(bt_)
 {
-	const char* p_ = pos;
-	unsigned v = 0;
-	unpack_uint( &p_, end, &v );
-	return v;
+    
 }
 
-bool SkipListReader::getDoclen( docid did, doclength* len )
-{
-	pos = ori_pos;
-	int curPosition = 0;
-	docid curDid;
-	unpack_uint( &pos, end, &curDid );
-	while ( true )
-	{
-		if ( curDid > did )
-		{
-			return false;
-		}
-		if ( curDid == did )
-		{
-			unsigned flag = 0;
-			unpack_uint( &pos, end, &flag );
-			while ( flag == SEPERATOR )
-			{
-				read_increase( &pos, end, NULL, NULL );
-				flag=0;
-				unpack_uint( &pos, end, &flag );
-			}
-			unpack_uint( &pos, end, len );
-			return true;
-		}
-		unsigned incre_did=0;
-		unpack_uint( &pos, end, &incre_did );
-		if ( incre_did == SEPERATOR )
-		{
-			unsigned p_offset = 0;
-			unsigned d_offset = 0;
-			read_increase( &pos, end, &p_offset, &d_offset );
-			if ( did >= curDid+d_offset )
-			{
-				pos += p_offset;
-				curDid += d_offset;
-			}
-			else
-			{
-				if ( readCurrent() != SEPERATOR )
-				{
-					unsigned d_offset = 0;
-					const char* p_ = pos;
-					read_increase( &p_, end, &d_offset, NULL );
-					curDid += d_offset;
-				}
-			}
-		}
-		else
-		{
-			unsigned cur_len = 0;
-			unpack_uint( &pos, end, &cur_len );
-			if ( pos == end )
-			{
-				return false;
-			}
-			if ( readCurrent() != SEPERATOR )
-			{
-				unsigned d_offset = 0;
-				const char* p_ = pos;
-				read_increase( &p_, end, &d_offset, NULL );
-				curDid += d_offset;
-			}
-		}
-	}
-}
-
-SkipListWriter::SkipListWriter( string& chunk_ )
-	: chunk( chunk_ )
-{
-	pos = chunk.data();
-	end = pos+chunk.size();
-}
-
-bool SkipListWriter::merge_doclen_change( const map<docid,doclength>& changes )
+bool SkipListWriter::merge_doclen_change(map<docid,termcount>::const_iterator start_, map<docid,termcount>::const_iterator end_)
 {
 	map<docid,doclength> origin_postlist;
-	pos = chunk.data();
+	const char* pos = start;
 	docid cur_did = 0, incre_did = 0;
 	doclength len = 0;
-	unpack_uint( &pos, end, &cur_did );
+    cur_did = first_did;
 	while ( pos != end )
 	{
 		unpack_uint( &pos, end, &incre_did );
@@ -483,14 +360,14 @@ bool SkipListWriter::merge_doclen_change( const map<docid,doclength>& changes )
 		cur_did += incre_did;
 		origin_postlist[cur_did]=len;
 	}
-	map<docid,doclength>::const_iterator it = changes.begin(), p;
-	for( ; it!=changes.end() ; ++it )
+	map<docid,doclength>::const_iterator it = start_;
+	for( ; it!=end_ ; ++it )
 	{
 		origin_postlist[it->first]=it->second;
 	}
 	SkipList sl( origin_postlist );
-	sl.buildSkipList( cal_level(origin_postlist.size()) );
-	chunk.clear();
+	string chunk;
 	sl.encode( chunk );
+    (*bt)[origin_postlist.begin()->first] = chunk;
 	return true;
 }

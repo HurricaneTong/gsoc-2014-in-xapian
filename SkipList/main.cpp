@@ -6,23 +6,24 @@
 #include "fstream"
 #include "SkipList.h"
 #include "string"
+#include "time.h"
 
 using namespace std;
 
 void inputMap( map<docid,doclength>& postlist )
 {
-	postlist[4]=3;
-	postlist[5]=7;
-	postlist[9]=2;
-	postlist[15]=3;
-	postlist[16]=4;
-	postlist[18]=11;
-	postlist[27]=20;
-	postlist[37]=40;
-//	for ( int i = 1 ; i<1024 ; ++i )
-//	{
-//		postlist[i] = 2*i;
-//	}
+//	postlist[4]=3;
+//	postlist[5]=7;
+//	postlist[9]=2;
+//	postlist[15]=3;
+//	postlist[16]=4;
+//	postlist[18]=11;
+//	postlist[27]=20;
+//	postlist[37]=40;
+	for ( int i = 1 ; i<2048 ; ++i )
+	{
+		postlist[i] = 2*i;
+	}
 }
 
 void inputChanges( map<docid,doclength>& changes )
@@ -41,73 +42,46 @@ void mergeChanges( map<docid,doclength>& postlist, const map<docid,doclength>& c
 	}
 }
 
-/*int deleteDid( docid did, docid bias, vector<unsigned>& src )
-{
-	int p = -1;
-	if ( getData( did, bias, src, &p ) == -1)
-	{
-		return 0;
-	}
-	int next_p = p+2;
-	while ( src[next_p] == (unsigned)-1 )
-	{
-		next_p += 3;
-	}
-	int tmp = src[next_p];
-	src[next_p] += src[p];
-	int longer = encodeLength(src[next_p])-encodeLength(tmp);
-	for ( int i = next_p ; i>=0 ; --i )
-	{
-		if ( src[i] == (unsigned)-1 )
-		{
-			if ( i+3+src[i+1] >= next_p )
-			{
-				int tmp = src[i+1];
-				src[i+1] += longer;
-				longer += encodeLength(src[i+1])-encodeLength(tmp);
-			}
-		}
-	}
-	int shoter = encodeLength(src[p])+encodeLength(src[p+1]);
-	for ( int i = p ; i>=0 ; --i )
-	{
-		if ( src[i] == (unsigned)-1 )
-		{
-			if ( i+3+src[i+1] > p )
-			{
-				int tmp = src[i+1];
-				src[i+1] -= shoter;
-				shoter += encodeLength(tmp)-encodeLength(src[i+1]);
-			}
-			else if ( i+3+src[i+1] == p )
-			{
 
-			}
-		}
-	}
-	src.erase( src.begin()+p, src.begin()+p+2 );
-	return 1;
-}*/
 
 void test( const map<docid,doclength>& postlist, const string& chunk )
 {
     const char* pos = chunk.data();
     const char* end = pos+chunk.size();
-	SkipListReader slr(pos,end,0);
+    vector< pair<unsigned, unsigned> > data;
+	SkipListReader slr(pos,end,postlist.begin()->first);
 	map<docid,doclength>::const_iterator it = postlist.begin();
-	for ( ; it!=postlist.end() ; ++it )
-	{
-		int v1 = it->second;
-		doclength v2 = 0;
-		slr.getDoclen( it->first, &v2 );
-		if ( v1 != v2 )
-		{
-			cout << it->first << endl;
-			cout << "correct: " << v1 << endl;
-			cout << "wrong: " << v2 << endl;
-			return;
-		}
-	}
+    for (; it!=postlist.end() ; ++it) {
+        data.push_back(*it);
+    }
+    srand((int)time(0));
+    for (int i=0 ; i<10000; ++i) {
+        int k = rand()%data.size();
+        unsigned v1, v2, v3;
+        v1 = v2 = v3 = 0;
+        if (k%2) {
+            slr.jump_to(data[k].first);
+            if (slr.next() && !slr.is_at_end()) {
+                v1 = data[k+1].first;
+                v2 = data[k+1].second;
+                v3 = slr.get_wdf();
+            }
+        } else {
+            v1 = data[k].first;
+            v2 = data[k].second;
+            if (slr.jump_to(v1)) {
+                v3 = slr.get_wdf();
+            } else {
+                cout << "error: no such did" << endl;
+            }
+        }
+
+        if (v2 != v3) {
+            cout << v1 << endl;
+            cout << "correct: " << v2 << endl;
+            cout << "wrong: " << v3 << endl;
+        }
+    }
 	cout << "OK!" << endl;
 }
 
@@ -149,15 +123,17 @@ int main()
 	inputChanges(changes);
 
 	SkipList sl(postlist);
-	sl.buildSkipList( cal_level(postlist.size()) );
 	sl.encode(chunk);
 	test(postlist,chunk);
 
-	SkipListWriter slw(chunk);
-	slw.merge_doclen_change(changes);
+    const char* pos = chunk.data();
+    const char* end = pos+chunk.size();
+    BTree bt;
+	SkipListWriter slw(pos,end,postlist.begin()->first,&bt);
+	slw.merge_doclen_change(changes.begin(),changes.end());
 
 	mergeChanges(postlist,changes);
-	test(postlist,chunk);
+	test(postlist,bt[postlist.begin()->first]);
 
 	
 	//ofstream out("out.txt");
